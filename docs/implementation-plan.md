@@ -1,5 +1,24 @@
 # GitTidy Implementation Plan
 
+## Current State
+
+GitTidy already includes:
+
+- Tailwind styling
+- dark default UI with light/dark toggle
+- GitHub OAuth start/callback routes
+- repo selection and detail loading
+- README preview and score checklist
+- OpenRouter generation
+- confirmation-gated GitHub write-back actions
+
+Keep the remaining work small:
+
+- configure GitHub OAuth app credentials in Vercel
+- verify OAuth end to end in browser
+- tighten visual polish only where needed
+- avoid adding new surfaces or persistence layers
+
 ## Principles
 
 - Keep the codebase single-app and feature-local.
@@ -20,7 +39,7 @@
   - `types/`
 - Use local React state for phase 1 and phase 2.
 - Add serverless functions under `api/` or platform-specific function directory in phase 3.
-- Prefer a GitHub token input flow first instead of OAuth.
+- Use GitHub OAuth instead of a token input flow.
 
 ## Phase 1: Foundation
 
@@ -78,9 +97,9 @@
 
 ### Exit Criteria
 
-- User can enter a token and fetch repos.
-- Real repositories display score and issue feedback.
-- Mock mode still works when no token is present.
+- User can sign in with GitHub OAuth and fetch repos.
+- Real repositories display score, README, and issue feedback.
+- Missing homepage warning is shown in the detail panel.
 
 ## Phase 3: OpenRouter Integration
 
@@ -106,6 +125,7 @@
 ### Exit Criteria
 
 - Generate action returns structured content from OpenRouter.
+- Generated README renders in a preview panel.
 - Failure states are visible and recoverable.
 
 ## Phase 4: Polish
@@ -116,16 +136,17 @@
 
 ### Tasks
 
-1. Add copy-to-clipboard actions for each AI output section.
-2. Add toast or inline status feedback.
-3. Improve skeleton and empty states.
-4. Tighten responsive behavior and spacing.
+1. Add copy-to-clipboard actions for the generated README.
+2. Add confirmation modal for any GitHub write action.
+3. Add inline status feedback.
+4. Improve empty states and responsive behavior.
 5. Audit UI text for clarity and brevity.
 6. Add environment variable documentation.
 
 ### Exit Criteria
 
-- Copy actions work across all generated outputs.
+- Copy README works.
+- GitHub write-back only occurs after confirmation.
 - Error states are understandable.
 - UI feels production-minded, not scaffold-like.
 
@@ -146,6 +167,7 @@
 
 - `src/features/github/*`
 - `src/lib/github.ts`
+- `api/github/oauth/*`
 
 ### Phase 3
 
@@ -156,11 +178,12 @@
 ### Phase 4
 
 - small refinements across existing files
+- docs updates for OAuth and write-back setup
 
 ## Risks and Mitigations
 
 - GitHub auth complexity:
-  Use token input first.
+  Use OAuth callback endpoints and keep the flow explicit.
 - API rate limits:
   keep requests narrow and lazy-load README detail.
 - Overly complex AI responses:

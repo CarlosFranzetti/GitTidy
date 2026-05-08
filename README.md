@@ -12,7 +12,7 @@ Students and indie developers ship real work, then bury it behind thin READMEs, 
 
 ## What It Does
 
-- Connects to GitHub with a token-first MVP auth flow.
+- Connects to GitHub with OAuth.
 - Lists repositories and lets you select one or more.
 - Samples repo metadata, README markdown, docs markdown, and lightweight config files.
 - Uses OpenRouter with Baidu Qianfan CoBuddy free model.
@@ -55,6 +55,8 @@ Create `.env.local` in the project root:
 ```env
 OPENROUTER_API_KEY=your_openrouter_key_here
 OPENROUTER_MODEL=baidu/cobuddy:free
+GITHUB_CLIENT_ID=your_github_oauth_client_id
+GITHUB_CLIENT_SECRET=your_github_oauth_client_secret
 ```
 
 Run the full local app:
@@ -70,6 +72,12 @@ http://localhost:3000/
 ```
 
 Use `npm run dev` only when working on frontend-only UI. AI routes require `npm run dev:full`.
+
+For GitHub OAuth, create a GitHub OAuth app with this callback URL:
+
+```text
+http://localhost:3000/api/github/oauth/callback
+```
 
 ## Scripts
 
@@ -88,6 +96,8 @@ Use `npm run dev` only when working on frontend-only UI. AI routes require `npm 
 ```text
 baidu/cobuddy:free
 ```
+
+`GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are required for GitHub OAuth.
 
 ## Project Status
 
