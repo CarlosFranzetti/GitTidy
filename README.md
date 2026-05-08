@@ -4,6 +4,8 @@ GitTidy turns messy GitHub repos into portfolio-ready projects.
 
 It connects to GitHub, lets you select one or more repositories, asks AI to infer missing project context from repo metadata and markdown files, then generates a clean preview of README, description, topic, and deploy-link improvements before anything is committed.
 
+Live app: https://git-tidy.vercel.app
+
 ## Why It Exists
 
 Students and indie developers ship real work, then bury it behind thin READMEs, missing descriptions, no topics, and no deploy links. GitTidy is the small cleanup pass before you send someone your GitHub profile.
