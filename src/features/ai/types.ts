@@ -1,10 +1,9 @@
 export type AiSuggestions = {
   repoName: string
-  suggestedDescription: string
-  suggestedReadme: string
-  suggestedTopics: string[]
-  deploySuggestions: string[]
-  commitSummary: string
+  readmeMd: string
+  description: string
+  topics: string[]
+  deploySuggestion: string
 }
 
 export type RepoGenerationInput = {
@@ -17,6 +16,7 @@ export type RepoGenerationInput = {
   topics: string[]
   readmeWordCount: number
   readmeExcerpt: string
+  existingReadme?: string
   issues: string[]
 }
 

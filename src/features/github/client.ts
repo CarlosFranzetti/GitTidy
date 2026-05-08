@@ -1,4 +1,5 @@
 import type {
+  GitHubReadmeResponse,
   GitHubRepoResponse,
   GitHubViewerResponse,
 } from './types'
@@ -44,6 +45,113 @@ export async function fetchRepositories(token: string) {
     '/user/repos?sort=updated&per_page=30',
     token,
   )
+}
+
+export async function fetchRepositoryDetails(
+  owner: string,
+  repo: string,
+  token: string,
+) {
+  return requestJson<GitHubRepoResponse>(`/repos/${owner}/${repo}`, token)
+}
+
+export async function fetchRepositoryReadme(
+  owner: string,
+  repo: string,
+  token: string,
+) {
+  const response = await fetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}/readme`, {
+    headers: buildHeaders(token),
+  })
+
+  if (response.status === 404) {
+    return null
+  }
+
+  if (!response.ok) {
+    throw new GitHubClientError(resolveErrorMessage(response.status), response.status)
+  }
+
+  const payload = (await response.json()) as GitHubReadmeResponse
+
+  return {
+    ...payload,
+    decodedContent: decodeBase64Content(payload.content),
+  }
+}
+
+export async function updateRepositoryReadme(input: {
+  owner: string
+  repo: string
+  token: string
+  content: string
+  sha?: string
+}) {
+  const response = await fetch(
+    `${GITHUB_API_BASE}/repos/${input.owner}/${input.repo}/contents/README.md`,
+    {
+      method: 'PUT',
+      headers: buildHeaders(input.token),
+      body: JSON.stringify({
+        message: 'Update README with GitTidy',
+        content: encodeBase64Content(input.content),
+        sha: input.sha,
+      }),
+    },
+  )
+
+  if (!response.ok) {
+    throw new GitHubClientError(resolveErrorMessage(response.status), response.status)
+  }
+
+  return response.json() as Promise<unknown>
+}
+
+export async function updateRepositoryMetadata(input: {
+  owner: string
+  repo: string
+  token: string
+  description: string
+  homepage: string
+  topics: string[]
+}) {
+  const repoResponse = await fetch(
+    `${GITHUB_API_BASE}/repos/${input.owner}/${input.repo}`,
+    {
+      method: 'PATCH',
+      headers: buildHeaders(input.token),
+      body: JSON.stringify({
+        description: input.description,
+        homepage: input.homepage,
+      }),
+    },
+  )
+
+  if (!repoResponse.ok) {
+    throw new GitHubClientError(
+      resolveErrorMessage(repoResponse.status),
+      repoResponse.status,
+    )
+  }
+
+  const topicsResponse = await fetch(
+    `${GITHUB_API_BASE}/repos/${input.owner}/${input.repo}/topics`,
+    {
+      method: 'PUT',
+      headers: {
+        ...buildHeaders(input.token),
+        Accept: 'application/vnd.github+json',
+      },
+      body: JSON.stringify({ names: input.topics }),
+    },
+  )
+
+  if (!topicsResponse.ok) {
+    throw new GitHubClientError(
+      resolveErrorMessage(topicsResponse.status),
+      topicsResponse.status,
+    )
+  }
 }
 
 export async function fetchReadmeWordCount(
@@ -173,12 +281,24 @@ function wordCount(value: string) {
   return value.trim() ? value.trim().split(/\s+/).length : 0
 }
 
+function decodeBase64Content(value: string) {
+  const binary = window.atob(value.replace(/\s/g, ''))
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+  return new TextDecoder().decode(bytes)
+}
+
+function encodeBase64Content(value: string) {
+  const bytes = new TextEncoder().encode(value)
+  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('')
+  return window.btoa(binary)
+}
+
 function resolveErrorMessage(status: number) {
   switch (status) {
     case 401:
-      return 'GitHub rejected the token. Check that it is valid and has repo read access.'
+      return 'GitHub rejected the session. Sign in again and make sure repo access is allowed.'
     case 403:
-      return 'GitHub rate limited or denied the request. Try again shortly.'
+      return 'GitHub rate limited or denied the request. Write actions may need repo permission.'
     default:
       return 'GitHub request failed. Try again in mock mode or verify the token.'
   }

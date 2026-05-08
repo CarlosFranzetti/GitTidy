@@ -11,6 +11,14 @@ export type GitHubRepoResponse = {
   default_branch: string
 }
 
+export type GitHubReadmeResponse = {
+  name: string
+  path: string
+  sha: string
+  content: string
+  encoding: string
+}
+
 export type GitHubViewerResponse = {
   login: string
   name: string | null

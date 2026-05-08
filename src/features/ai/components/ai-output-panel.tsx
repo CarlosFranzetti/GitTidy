@@ -64,25 +64,25 @@ export function AiOutputPanel({
         <AiSection
           title="Suggested description"
           body={
-            suggestions?.suggestedDescription ??
+            suggestions?.description ??
             'Sharper GitHub summary tuned for first-time visitors.'
           }
           onCopy={
-            suggestions?.suggestedDescription
-              ? () => void handleCopy('Description copied.', suggestions.suggestedDescription)
+            suggestions?.description
+              ? () => void handleCopy('Description copied.', suggestions.description)
               : undefined
           }
         />
         <AiSection
           title="README rewrite"
           body={
-            suggestions?.suggestedReadme ??
+            suggestions?.readmeMd ??
             'Improved project overview, setup, feature list, and demo guidance.'
           }
           prewrap
           onCopy={
-            suggestions?.suggestedReadme
-              ? () => void handleCopy('README copied.', suggestions.suggestedReadme)
+            suggestions?.readmeMd
+              ? () => void handleCopy('README copied.', suggestions.readmeMd)
               : undefined
           }
         />
@@ -90,15 +90,15 @@ export function AiOutputPanel({
           title="Topics"
           body={
             suggestions
-              ? suggestions.suggestedTopics.join(', ')
+              ? suggestions.topics.join(', ')
               : 'Relevant tags based on the repository language and use case.'
           }
           onCopy={
-            suggestions?.suggestedTopics
+            suggestions?.topics
               ? () =>
                   void handleCopy(
                     'Topics copied.',
-                    suggestions.suggestedTopics.join(', '),
+                    suggestions.topics.join(', '),
                   )
               : undefined
           }
@@ -107,16 +107,16 @@ export function AiOutputPanel({
           title="Deploy ideas"
           body={
             suggestions
-              ? suggestions.deploySuggestions.join('\n')
+              ? suggestions.deploySuggestion
               : 'Hosting or demo recommendations based on the repository type.'
           }
           prewrap
           onCopy={
-            suggestions?.deploySuggestions
+            suggestions?.deploySuggestion
               ? () =>
                   void handleCopy(
                     'Deploy suggestions copied.',
-                    suggestions.deploySuggestions.join('\n'),
+                    suggestions.deploySuggestion,
                   )
               : undefined
           }

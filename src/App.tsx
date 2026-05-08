@@ -1,539 +1,687 @@
-import { useState } from 'react'
-import { generateSuggestions, inferContext } from './features/ai/client'
+import { useEffect, useMemo, useState } from 'react'
+import { generateSuggestions } from './features/ai/client'
 import type { AiSuggestions, RepoGenerationInput } from './features/ai/types'
 import {
   fetchRepositories,
-  fetchRepositoryContextText,
+  fetchRepositoryDetails,
+  fetchRepositoryReadme,
   fetchViewer,
   GitHubClientError,
+  updateRepositoryMetadata,
+  updateRepositoryReadme,
 } from './features/github/client'
 import { normalizeGitHubRepo } from './features/github/normalize'
-import { mockRepos } from './features/repos/mock-data'
 import { copyText } from './lib/clipboard'
 import type { RepoRecord } from './types/repo'
 
 const STORAGE_KEY = 'gittidy.github-token'
+const THEME_KEY = 'gittidy.theme'
+const DEPLOY_WARNING =
+  'No deployed URL detected. Add a Vercel link so people can actually click the thing you built.'
 
-type ContextForm = {
-  projectGoal: string
-  audience: string
-  deployTarget: string
-  tone: string
-  extraNotes: string
+type Theme = 'dark' | 'light'
+
+type ActiveRepo = {
+  repo: RepoRecord
+  readme: string
+  readmeSha?: string
+  isLoading: boolean
 }
 
-const defaultContext: ContextForm = {
-  projectGoal: '',
-  audience: 'recruiters, collaborators, and portfolio visitors',
-  deployTarget: '',
-  tone: 'clear, concise, and professional',
-  extraNotes: '',
+type ScoreChecklist = {
+  hasReadme: boolean
+  hasDetailedReadme: boolean
+  hasDescription: boolean
+  hasHomepage: boolean
+  hasTopics: boolean
+}
+
+type PendingAction = {
+  title: string
+  body: string
+  confirmLabel: string
+  run: () => Promise<void>
 }
 
 function App() {
-  const [githubToken, setGithubToken] = useState(() => {
-    if (typeof window === 'undefined') {
-      return ''
-    }
-
-    return window.localStorage.getItem(STORAGE_KEY) ?? ''
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return 'dark'
+    return (window.localStorage.getItem(THEME_KEY) as Theme | null) ?? 'dark'
   })
-  const [tokenDraft, setTokenDraft] = useState(githubToken)
+  const [githubToken, setGithubToken] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    return (
+      new URLSearchParams(window.location.search).get('github_token') ??
+      window.localStorage.getItem(STORAGE_KEY) ??
+      ''
+    )
+  })
   const [viewerName, setViewerName] = useState('')
-  const [repos, setRepos] = useState<RepoRecord[]>(mockRepos)
-  const [selectedRepoIds, setSelectedRepoIds] = useState<number[]>([
-    mockRepos[0]?.id ?? 0,
-  ])
-  const [context, setContext] = useState<ContextForm>(defaultContext)
-  const [activeMode, setActiveMode] = useState<'mock' | 'live'>('mock')
-  const [isConnecting, setIsConnecting] = useState(false)
-  const [isInferring, setIsInferring] = useState(false)
+  const [repos, setRepos] = useState<RepoRecord[]>([])
+  const [activeRepo, setActiveRepo] = useState<ActiveRepo | null>(null)
+  const [generated, setGenerated] = useState<AiSuggestions | null>(null)
+  const [homepageDraft, setHomepageDraft] = useState('')
+  const [isLoadingRepos, setIsLoadingRepos] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [message, setMessage] = useState('')
-  const [previews, setPreviews] = useState<AiSuggestions[]>([])
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
+  const [isWriting, setIsWriting] = useState(false)
+  const [message, setMessage] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    return new URLSearchParams(window.location.search).get('error') ?? ''
+  })
   const [copyMessage, setCopyMessage] = useState('')
 
-  const selectedRepos = repos.filter((repo) => selectedRepoIds.includes(repo.id))
-  const canGenerate = selectedRepos.length > 0 && !isGenerating && !isInferring
+  const score = useMemo(
+    () => calculateScore(activeRepo?.repo, activeRepo?.readme ?? ''),
+    [activeRepo],
+  )
+
+  const selectedOwnerRepo = activeRepo ? splitFullName(activeRepo.repo.fullName) : null
+  const appClass =
+    theme === 'dark'
+      ? 'min-h-screen bg-[#070b12] text-slate-100'
+      : 'min-h-screen bg-slate-100 text-slate-950'
+  const panelClass =
+    theme === 'dark'
+      ? 'border-white/10 bg-white/[0.06] shadow-2xl shadow-black/30'
+      : 'border-slate-200 bg-white shadow-xl shadow-slate-200/70'
+  const mutedText = theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+
+  useEffect(() => {
+    window.localStorage.setItem(THEME_KEY, theme)
+  }, [theme])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('github_token')
+    const error = params.get('error')
+
+    if (!token && !error) return
+
+    if (token) {
+      window.localStorage.setItem(STORAGE_KEY, token)
+    }
+    window.history.replaceState({}, '', window.location.pathname)
+  }, [])
+
+  useEffect(() => {
+    if (!githubToken) return
+    void loadRepos(githubToken)
+  }, [githubToken])
 
   return (
-    <main className="min-h-screen bg-[#f7f8fb] px-4 py-6 text-slate-950 sm:px-6">
-      <div className="mx-auto max-w-5xl">
-        <header className="mb-6 flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
+    <main className={appClass}>
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-5 sm:px-6 lg:px-8">
+        <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-5 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-500">GitTidy</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-              Prepare repo updates before you commit.
+            <p className={`text-sm font-medium ${mutedText}`}>GitTidy</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight md:text-4xl">
+              Polish the repo before anyone clicks it.
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Connect GitHub, choose repos, add context, generate improvements,
-              and review the exact preview before any commit step.
+            <p className={`mt-2 max-w-2xl text-sm leading-6 ${mutedText}`}>
+              Sign in, pick a repo, preview the existing README, generate a
+              cleaner one, then copy or write changes only after confirmation.
             </p>
           </div>
-          <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600">
-            {activeMode === 'live'
-              ? `Connected${viewerName ? ` as @${viewerName}` : ''}`
-              : 'Demo mode'}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+              className={buttonClass(theme, 'secondary')}
+            >
+              {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            </button>
+            {githubToken ? (
+              <button type="button" onClick={disconnect} className={buttonClass(theme, 'secondary')}>
+                Disconnect
+              </button>
+            ) : null}
+            <button type="button" onClick={startGitHubOAuth} className={buttonClass(theme, 'primary')}>
+              {githubToken ? `@${viewerName || 'GitHub'}` : 'Sign in with GitHub'}
+            </button>
           </div>
         </header>
 
         {message ? (
-          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div
+            className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+              theme === 'dark'
+                ? 'border-amber-400/30 bg-amber-400/10 text-amber-100'
+                : 'border-amber-200 bg-amber-50 text-amber-900'
+            }`}
+          >
             {message}
           </div>
         ) : null}
 
-        <div className="space-y-4">
-          <Section number="1" title="Connect GitHub">
-            <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
-              <label>
-                <span className="sr-only">GitHub token</span>
-                <input
-                  type="password"
-                  value={tokenDraft}
-                  onChange={(event) => setTokenDraft(event.target.value)}
-                  placeholder="GitHub token with repo read access"
-                  className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-900"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => void handleConnect()}
-                disabled={isConnecting || !tokenDraft.trim()}
-                className="h-11 rounded-md bg-slate-950 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-              >
-                {isConnecting ? 'Connecting...' : 'Connect'}
-              </button>
-              <button
-                type="button"
-                onClick={useDemoRepos}
-                className="h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-800"
-              >
-                Demo
-              </button>
-            </div>
-            <p className="mt-2 text-xs leading-5 text-slate-500">
-              MVP auth uses a GitHub token. OAuth can replace this later without
-              changing the repo selection and preview flow.
-            </p>
-          </Section>
-
-          <Section number="2" title="Select repos">
-            <div className="divide-y divide-slate-200 rounded-md border border-slate-200 bg-white">
-              {repos.map((repo) => {
-                const checked = selectedRepoIds.includes(repo.id)
-
-                return (
-                  <label
-                    key={repo.id}
-                    className="flex cursor-pointer items-start gap-3 p-3"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleRepo(repo.id)}
-                      className="mt-1 h-4 w-4 rounded border-slate-300"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">
-                        {repo.fullName}
-                      </span>
-                      <span className="mt-1 block text-xs text-slate-500">
-                        {repo.language} · score {repo.score} ·{' '}
-                        {repo.issues.length
-                          ? repo.issues.map((issue) => issue.label).join(', ')
-                          : 'ready for polish'}
-                      </span>
-                    </span>
-                  </label>
-                )
-              })}
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              {selectedRepos.length} selected
-            </p>
-          </Section>
-
-          <Section number="3" title="Add context">
-            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm leading-6 text-slate-600">
-                Let AI prefill this from selected repo metadata and README
-                markdown, then edit anything that feels off.
-              </p>
-              <button
-                type="button"
-                onClick={() => void handleInferContext()}
-                disabled={selectedRepos.length === 0 || isInferring}
-                className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 disabled:cursor-not-allowed disabled:text-slate-400"
-              >
-                {isInferring ? 'Inferring...' : 'Infer from repos'}
-              </button>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field
-                label="What should these repos communicate?"
-                value={context.projectGoal}
-                placeholder="Example: portfolio-ready student projects"
-                onChange={(value) => updateContext('projectGoal', value)}
-              />
-              <Field
-                label="Who is the audience?"
-                value={context.audience}
-                onChange={(value) => updateContext('audience', value)}
-              />
-              <Field
-                label="Preferred deploy target"
-                value={context.deployTarget}
-                placeholder="Example: Vercel, GitHub Pages, Render"
-                onChange={(value) => updateContext('deployTarget', value)}
-              />
-              <Field
-                label="Tone"
-                value={context.tone}
-                onChange={(value) => updateContext('tone', value)}
-              />
-            </div>
-            <label className="mt-3 block">
-              <span className="text-sm font-medium text-slate-700">
-                Extra notes
-              </span>
-              <textarea
-                value={context.extraNotes}
-                onChange={(event) => updateContext('extraNotes', event.target.value)}
-                placeholder="Anything the AI should know before writing previews."
-                rows={3}
-                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-900"
-              />
-            </label>
-          </Section>
-
-          <Section number="4" title="Generate and preview">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm leading-6 text-slate-600">
-                GitTidy will generate preview text only. Nothing is committed
-                until you explicitly add write support later.
-              </p>
-              <button
-                type="button"
-                onClick={() => void handleGenerate()}
-                disabled={!canGenerate}
-                className="h-11 rounded-md bg-slate-950 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-              >
-                {isGenerating ? 'Generating...' : 'Generate previews'}
-              </button>
+        <div className="grid flex-1 gap-5 lg:grid-cols-[360px_1fr]">
+          <aside className={`rounded-2xl border p-4 ${panelClass}`}>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Repositories</h2>
+                <p className={`text-sm ${mutedText}`}>
+                  {githubToken
+                    ? isLoadingRepos
+                      ? 'Loading GitHub repos...'
+                      : `${repos.length} available`
+                    : 'OAuth required'}
+                </p>
+              </div>
+              {githubToken ? (
+                <button
+                  type="button"
+                  onClick={() => void loadRepos(githubToken)}
+                  className={buttonClass(theme, 'ghost')}
+                >
+                  Refresh
+                </button>
+              ) : null}
             </div>
 
-            {previews.length > 0 ? (
-              <div className="mt-4 space-y-3">
-                {previews.map((preview) => (
-                  <PreviewCard
-                    key={preview.repoName}
-                    preview={preview}
-                    onCopy={(value) => void handleCopy(value)}
-                  />
-                ))}
-                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                  <button
-                    type="button"
-                    disabled
-                    className="h-10 rounded-md bg-slate-300 px-4 text-sm font-medium text-white"
-                  >
-                    Commit changes
-                  </button>
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
-                    Commit support is intentionally gated. Next step is adding a
-                    write-scope GitHub flow and showing a final file diff before
-                    this button is enabled.
-                  </p>
-                </div>
+            {!githubToken ? (
+              <div className={`rounded-xl border border-dashed p-4 text-sm leading-6 ${mutedText}`}>
+                GitHub OAuth is required to fetch repo details and write changes.
+                The app does not write anything automatically.
               </div>
             ) : (
-              <div className="mt-4 rounded-md border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
-                Generated previews will appear here.
+              <div className="space-y-2">
+                {repos.map((repo) => (
+                  <button
+                    key={repo.id}
+                    type="button"
+                    onClick={() => void selectRepo(repo)}
+                    className={`w-full rounded-xl border p-3 text-left transition ${
+                      activeRepo?.repo.id === repo.id
+                        ? theme === 'dark'
+                          ? 'border-cyan-300/60 bg-cyan-300/10'
+                          : 'border-slate-950 bg-slate-950 text-white'
+                        : theme === 'dark'
+                          ? 'border-white/10 bg-white/[0.04] hover:border-white/25'
+                          : 'border-slate-200 bg-white hover:border-slate-400'
+                    }`}
+                  >
+                    <span className="block truncate text-sm font-semibold">{repo.fullName}</span>
+                    <span
+                      className={`mt-1 block truncate text-xs ${
+                        activeRepo?.repo.id === repo.id && theme === 'light'
+                          ? 'text-slate-300'
+                          : mutedText
+                      }`}
+                    >
+                      {repo.language} · {repo.description || 'No description yet'}
+                    </span>
+                  </button>
+                ))}
               </div>
             )}
+          </aside>
 
-            {copyMessage ? (
-              <p className="mt-3 text-sm text-emerald-700">{copyMessage}</p>
-            ) : null}
-          </Section>
+          <section className={`rounded-2xl border p-4 md:p-5 ${panelClass}`}>
+            {!activeRepo ? (
+              <EmptyState theme={theme} />
+            ) : (
+              <div className="space-y-5">
+                <div className="flex flex-col gap-4 border-b border-white/10 pb-5 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="min-w-0">
+                    <p className={`text-sm ${mutedText}`}>Selected repo</p>
+                    <h2 className="mt-1 truncate text-2xl font-semibold">
+                      {activeRepo.repo.fullName}
+                    </h2>
+                    <p className={`mt-2 max-w-3xl text-sm leading-6 ${mutedText}`}>
+                      {activeRepo.repo.description || 'No GitHub description yet.'}
+                    </p>
+                    {!score.checklist.hasHomepage ? (
+                      <div
+                        className={`mt-3 rounded-lg border px-3 py-2 text-sm ${
+                          theme === 'dark'
+                            ? 'border-amber-300/30 bg-amber-300/10 text-amber-100'
+                            : 'border-amber-200 bg-amber-50 text-amber-900'
+                        }`}
+                      >
+                        {DEPLOY_WARNING}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="shrink-0 rounded-2xl border border-white/10 px-5 py-4 text-center">
+                    <p className={`text-xs font-medium uppercase tracking-[0.18em] ${mutedText}`}>
+                      GitTidy score
+                    </p>
+                    <p className="mt-1 text-5xl font-semibold">{score.total}</p>
+                    <p className={`text-sm ${mutedText}`}>/ 100</p>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
+                  <div className="space-y-4">
+                    <Checklist checklist={score.checklist} theme={theme} />
+                    <label className="block">
+                      <span className={`text-sm font-medium ${mutedText}`}>Deploy URL</span>
+                      <input
+                        value={homepageDraft}
+                        onChange={(event) => setHomepageDraft(event.target.value)}
+                        placeholder="https://your-project.vercel.app"
+                        className={inputClass(theme)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void handleGenerate()}
+                      disabled={isGenerating || activeRepo.isLoading}
+                      className={buttonClass(theme, 'primary', 'w-full')}
+                    >
+                      {isGenerating ? 'Generating...' : 'Generate Beautified README'}
+                    </button>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <ReadmePanel
+                      title="Existing README"
+                      value={
+                        activeRepo.isLoading
+                          ? 'Fetching README from GitHub...'
+                          : activeRepo.readme || 'No README detected.'
+                      }
+                      theme={theme}
+                    />
+                    <ReadmePanel
+                      title="Generated README"
+                      value={generated?.readmeMd || 'Generate a beautified README to preview it here.'}
+                      theme={theme}
+                    />
+                  </div>
+                </div>
+
+                {generated ? (
+                  <div className="rounded-2xl border border-white/10 p-4">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <PreviewMeta title="Description" value={generated.description} mutedText={mutedText} />
+                      <PreviewMeta title="Topics" value={generated.topics.join(', ')} mutedText={mutedText} />
+                      <PreviewMeta
+                        title="Deploy suggestion"
+                        value={generated.deploySuggestion || 'Homepage already exists.'}
+                        mutedText={mutedText}
+                      />
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleCopyReadme()}
+                        className={buttonClass(theme, 'secondary')}
+                      >
+                        Copy README
+                      </button>
+                      <button
+                        type="button"
+                        onClick={confirmReadmeUpdate}
+                        className={buttonClass(theme, 'secondary')}
+                      >
+                        Update README on GitHub
+                      </button>
+                      <button
+                        type="button"
+                        onClick={confirmMetadataUpdate}
+                        className={buttonClass(theme, 'secondary')}
+                      >
+                        Update repo description/topics/homepage
+                      </button>
+                    </div>
+                    {copyMessage ? (
+                      <p className="mt-3 text-sm text-emerald-400">{copyMessage}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </section>
         </div>
       </div>
+
+      {pendingAction ? (
+        <ConfirmationModal
+          action={pendingAction}
+          isWriting={isWriting}
+          theme={theme}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={() => void runPendingAction()}
+        />
+      ) : null}
     </main>
   )
 
-  async function handleConnect() {
-    const nextToken = tokenDraft.trim()
-
-    if (!nextToken) {
-      return
-    }
-
-    setIsConnecting(true)
+  async function loadRepos(token: string) {
+    setIsLoadingRepos(true)
     setMessage('')
 
     try {
       const [viewer, repoResponses] = await Promise.all([
-        fetchViewer(nextToken),
-        fetchRepositories(nextToken),
+        fetchViewer(token),
+        fetchRepositories(token),
       ])
-      const nextRepos = repoResponses.map((repo) => ({
-        ...normalizeGitHubRepo(repo),
-        readmeLoaded: false,
-      }))
+      const nextRepos = repoResponses.map((repo) => normalizeGitHubRepo(repo))
 
-      setGithubToken(nextToken)
-      window.localStorage.setItem(STORAGE_KEY, nextToken)
       setViewerName(viewer.login || viewer.name || '')
       setRepos(nextRepos)
-      setSelectedRepoIds(nextRepos.slice(0, 3).map((repo) => repo.id))
-      setActiveMode('live')
-      setPreviews([])
     } catch (error: unknown) {
-      setMessage(
-        error instanceof GitHubClientError || error instanceof Error
-          ? error.message
-          : 'GitHub connection failed.',
-      )
+      setMessage(resolveError(error, 'GitHub connection failed.'))
     } finally {
-      setIsConnecting(false)
+      setIsLoadingRepos(false)
     }
   }
 
-  function useDemoRepos() {
-    setActiveMode('mock')
-    setViewerName('')
-    setRepos(mockRepos)
-    setSelectedRepoIds([mockRepos[0]?.id ?? 0])
-    setPreviews([])
+  async function selectRepo(repo: RepoRecord) {
+    if (!githubToken) return
+
     setMessage('')
-  }
+    setGenerated(null)
+    setHomepageDraft(repo.homepage)
+    setActiveRepo({ repo, readme: '', isLoading: true })
 
-  function toggleRepo(repoId: number) {
-    setSelectedRepoIds((current) =>
-      current.includes(repoId)
-        ? current.filter((id) => id !== repoId)
-        : [...current, repoId],
-    )
-  }
+    const { owner, name } = splitFullName(repo.fullName)
 
-  function updateContext(key: keyof ContextForm, value: string) {
-    setContext((current) => ({ ...current, [key]: value }))
+    try {
+      const [details, readme] = await Promise.all([
+        fetchRepositoryDetails(owner, name, githubToken),
+        fetchRepositoryReadme(owner, name, githubToken),
+      ])
+      const decodedReadme = readme?.decodedContent ?? ''
+      const normalized = normalizeGitHubRepo(details, countWords(decodedReadme))
+
+      setHomepageDraft(normalized.homepage)
+      setActiveRepo({
+        repo: {
+          ...normalized,
+          readmeLoaded: true,
+          readmeExcerpt: truncateForPrompt(decodedReadme),
+        },
+        readme: decodedReadme,
+        readmeSha: readme?.sha,
+        isLoading: false,
+      })
+      setRepos((current) =>
+        current.map((item) => (item.id === normalized.id ? normalized : item)),
+      )
+    } catch (error: unknown) {
+      setMessage(resolveError(error, 'Could not load repo details.'))
+      setActiveRepo((current) => (current ? { ...current, isLoading: false } : current))
+    }
   }
 
   async function handleGenerate() {
-    if (!canGenerate) {
-      return
-    }
+    if (!activeRepo) return
 
     setIsGenerating(true)
     setMessage('')
-    setPreviews([])
+    setGenerated(null)
 
     try {
-      const enrichedRepos = await hydrateRepoContext(selectedRepos)
       const response = await generateSuggestions({
-        repos: enrichedRepos.map(toGenerationInput),
-        context,
+        repos: [toGenerationInput(activeRepo.repo, activeRepo.readme)],
+        context: {
+          projectGoal: 'Make this repository clear, clickable, and portfolio-ready.',
+          audience: 'students, recruiters, collaborators, and indie builders',
+          deployTarget: homepageDraft || activeRepo.repo.homepage || 'Vercel if this is a web app',
+          tone: 'fun, clear, student-builder friendly',
+          extraNotes: 'Do not invent features. Use only the repository metadata and existing README.',
+        },
       })
 
-      setPreviews(response.previews)
+      setGenerated(response.previews[0] ?? null)
     } catch (error: unknown) {
-      setMessage(
-        error instanceof Error ? error.message : 'AI generation failed.',
-      )
+      setMessage(resolveError(error, 'AI generation failed.'))
     } finally {
       setIsGenerating(false)
     }
   }
 
-  async function handleInferContext() {
-    if (selectedRepos.length === 0) {
-      return
-    }
-
-    setIsInferring(true)
-    setMessage('')
+  async function handleCopyReadme() {
+    if (!generated) return
 
     try {
-      const enrichedRepos = await hydrateRepoContext(selectedRepos)
-      const response = await inferContext({
-        repos: enrichedRepos.map(toGenerationInput),
-      })
-
-      setContext(response.context)
-    } catch (error: unknown) {
-      setMessage(
-        error instanceof Error ? error.message : 'Context inference failed.',
-      )
-    } finally {
-      setIsInferring(false)
-    }
-  }
-
-  async function hydrateRepoContext(nextRepos: RepoRecord[]) {
-    if (activeMode !== 'live' || !githubToken) {
-      return nextRepos
-    }
-
-    const hydrated = await Promise.all(
-      nextRepos.map(async (repo) => {
-        if (repo.readmeLoaded && repo.readmeExcerpt) {
-          return repo
-        }
-
-        const [owner, repoName] = repo.fullName.split('/')
-        const repoContextText = await fetchRepositoryContextText(
-          owner,
-          repoName,
-          repo.defaultBranch,
-          githubToken,
-        )
-        const readmeWordCount = countWords(repoContextText)
-
-        return {
-          ...normalizeGitHubRepo(
-            {
-              id: repo.id,
-              name: repo.name,
-              full_name: repo.fullName,
-              description: repo.description,
-              private: repo.private,
-              language: repo.language,
-              updated_at: repo.updatedAt,
-              homepage: repo.homepage,
-              topics: repo.topics,
-              default_branch: repo.defaultBranch,
-            },
-            readmeWordCount,
-          ),
-          readmeLoaded: true,
-          readmeExcerpt: truncateForPrompt(repoContextText),
-        }
-      }),
-    )
-
-    setRepos((current) =>
-      current.map((repo) => hydrated.find((item) => item.id === repo.id) ?? repo),
-    )
-
-    return hydrated
-  }
-
-  async function handleCopy(value: string) {
-    try {
-      await copyText(value)
-      setCopyMessage('Copied.')
+      await copyText(generated.readmeMd)
+      setCopyMessage('README copied.')
       window.setTimeout(() => setCopyMessage(''), 1500)
     } catch {
       setCopyMessage('Clipboard write failed.')
     }
   }
+
+  function confirmReadmeUpdate() {
+    if (!activeRepo || !generated || !selectedOwnerRepo) return
+
+    setPendingAction({
+      title: 'Update README on GitHub?',
+      body: `This will write the generated README to ${activeRepo.repo.fullName}. It will not update description, topics, or homepage.`,
+      confirmLabel: 'Update README',
+      run: async () => {
+        await updateRepositoryReadme({
+          owner: selectedOwnerRepo.owner,
+          repo: selectedOwnerRepo.name,
+          token: githubToken,
+          content: generated.readmeMd,
+          sha: activeRepo.readmeSha,
+        })
+        await selectRepo(activeRepo.repo)
+      },
+    })
+  }
+
+  function confirmMetadataUpdate() {
+    if (!activeRepo || !generated || !selectedOwnerRepo) return
+
+    setPendingAction({
+      title: 'Update repo metadata on GitHub?',
+      body: `This will update the GitHub description, topics, and homepage field for ${activeRepo.repo.fullName}.`,
+      confirmLabel: 'Update metadata',
+      run: async () => {
+        await updateRepositoryMetadata({
+          owner: selectedOwnerRepo.owner,
+          repo: selectedOwnerRepo.name,
+          token: githubToken,
+          description: generated.description,
+          topics: generated.topics,
+          homepage: homepageDraft.trim(),
+        })
+        await selectRepo(activeRepo.repo)
+      },
+    })
+  }
+
+  async function runPendingAction() {
+    if (!pendingAction) return
+
+    setIsWriting(true)
+    setMessage('')
+
+    try {
+      await pendingAction.run()
+      setPendingAction(null)
+      setMessage('GitHub update completed.')
+    } catch (error: unknown) {
+      setMessage(resolveError(error, 'GitHub update failed.'))
+    } finally {
+      setIsWriting(false)
+    }
+  }
+
+  function disconnect() {
+    window.localStorage.removeItem(STORAGE_KEY)
+    setGithubToken('')
+    setViewerName('')
+    setRepos([])
+    setActiveRepo(null)
+    setGenerated(null)
+  }
 }
 
-type SectionProps = {
-  number: string
-  title: string
-  children: React.ReactNode
-}
-
-function Section({ number, title, children }: SectionProps) {
+function EmptyState({ theme }: { theme: Theme }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center gap-3">
-        <span className="grid h-7 w-7 place-items-center rounded-full bg-slate-950 text-sm font-medium text-white">
-          {number}
-        </span>
-        <h2 className="text-base font-semibold">{title}</h2>
-      </div>
-      {children}
-    </section>
-  )
-}
-
-type FieldProps = {
-  label: string
-  value: string
-  placeholder?: string
-  onChange: (value: string) => void
-}
-
-function Field({ label, value, placeholder, onChange }: FieldProps) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
-      <input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-900"
-      />
-    </label>
-  )
-}
-
-type PreviewCardProps = {
-  preview: AiSuggestions
-  onCopy: (value: string) => void
-}
-
-function PreviewCard({ preview, onCopy }: PreviewCardProps) {
-  const readmePreview =
-    preview.suggestedReadme.length > 900
-      ? `${preview.suggestedReadme.slice(0, 900)}...`
-      : preview.suggestedReadme
-
-  return (
-    <article className="rounded-md border border-slate-200 bg-white p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h3 className="font-semibold">{preview.repoName}</h3>
-          <p className="mt-1 text-sm text-slate-600">
-            Commit summary: {preview.commitSummary}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => onCopy(formatPreview(preview))}
-          className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium"
+    <div className="grid min-h-[520px] place-items-center text-center">
+      <div className="max-w-md">
+        <div
+          className={`mx-auto grid h-14 w-14 place-items-center rounded-2xl text-2xl ${
+            theme === 'dark' ? 'bg-cyan-300/10 text-cyan-200' : 'bg-slate-950 text-white'
+          }`}
         >
-          Copy preview
-        </button>
+          GT
+        </div>
+        <h2 className="mt-5 text-2xl font-semibold">Pick a repo to tidy.</h2>
+        <p className={`mt-2 text-sm leading-6 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+          GitTidy fetches the repo metadata and README on click, then previews
+          AI changes before any write-back button can run.
+        </p>
       </div>
-
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        <PreviewBlock title="Description" body={preview.suggestedDescription} />
-        <PreviewBlock title="Topics" body={preview.suggestedTopics.join(', ')} />
-        <PreviewBlock
-          title="Deploy suggestions"
-          body={preview.deploySuggestions.join('\n')}
-        />
-        <PreviewBlock title="README preview" body={readmePreview} prewrap />
-      </div>
-    </article>
-  )
-}
-
-type PreviewBlockProps = {
-  title: string
-  body: string
-  prewrap?: boolean
-}
-
-function PreviewBlock({ title, body, prewrap = false }: PreviewBlockProps) {
-  return (
-    <div className="rounded-md bg-slate-50 p-3">
-      <p className="text-xs font-semibold uppercase text-slate-500">{title}</p>
-      <p
-        className={`mt-2 text-sm leading-6 text-slate-800 ${prewrap ? 'whitespace-pre-wrap' : ''}`}
-      >
-        {body}
-      </p>
     </div>
   )
 }
 
-function toGenerationInput(repo: RepoRecord): RepoGenerationInput {
+function Checklist({ checklist, theme }: { checklist: ScoreChecklist; theme: Theme }) {
+  const items = [
+    ['README exists', checklist.hasReadme],
+    ['README has enough detail', checklist.hasDetailedReadme],
+    ['Description exists', checklist.hasDescription],
+    ['Deploy link exists', checklist.hasHomepage],
+    ['Topics exist', checklist.hasTopics],
+  ] as const
+
+  return (
+    <div className="rounded-2xl border border-white/10 p-4">
+      <h3 className="text-sm font-semibold">Score checklist</h3>
+      <div className="mt-3 space-y-2">
+        {items.map(([label, checked]) => (
+          <div key={label} className="flex items-center gap-2 text-sm">
+            <span
+              className={`grid h-5 w-5 place-items-center rounded-full text-xs ${
+                checked
+                  ? 'bg-emerald-400 text-emerald-950'
+                  : theme === 'dark'
+                    ? 'bg-white/10 text-slate-400'
+                    : 'bg-slate-200 text-slate-500'
+              }`}
+            >
+              {checked ? '✓' : '•'}
+            </span>
+            <span>{label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ReadmePanel({
+  title,
+  value,
+  theme,
+}: {
+  title: string
+  value: string
+  theme: Theme
+}) {
+  return (
+    <div className="min-h-[440px] rounded-2xl border border-white/10">
+      <div className="border-b border-white/10 px-4 py-3">
+        <h3 className="text-sm font-semibold">{title}</h3>
+      </div>
+      <pre
+        className={`max-h-[560px] overflow-auto whitespace-pre-wrap break-words p-4 text-sm leading-6 ${
+          theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+        }`}
+      >
+        {value}
+      </pre>
+    </div>
+  )
+}
+
+function PreviewMeta({
+  title,
+  value,
+  mutedText,
+}: {
+  title: string
+  value: string
+  mutedText: string
+}) {
+  return (
+    <div>
+      <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${mutedText}`}>
+        {title}
+      </p>
+      <p className="mt-1 text-sm leading-6">{value}</p>
+    </div>
+  )
+}
+
+function ConfirmationModal({
+  action,
+  isWriting,
+  theme,
+  onCancel,
+  onConfirm,
+}: {
+  action: PendingAction
+  isWriting: boolean
+  theme: Theme
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4">
+      <div
+        className={`w-full max-w-md rounded-2xl border p-5 shadow-2xl ${
+          theme === 'dark'
+            ? 'border-white/10 bg-[#101827] text-slate-100'
+            : 'border-slate-200 bg-white text-slate-950'
+        }`}
+      >
+        <h2 className="text-xl font-semibold">{action.title}</h2>
+        <p className={`mt-2 text-sm leading-6 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+          {action.body}
+        </p>
+        <p className={`mt-3 text-sm font-medium ${theme === 'dark' ? 'text-amber-200' : 'text-amber-800'}`}>
+          GitTidy will never write automatically. Confirm to run this one action.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={onCancel} disabled={isWriting} className={buttonClass(theme, 'secondary')}>
+            Cancel
+          </button>
+          <button type="button" onClick={onConfirm} disabled={isWriting} className={buttonClass(theme, 'primary')}>
+            {isWriting ? 'Writing...' : action.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function startGitHubOAuth() {
+  window.location.href = '/api/github/oauth/start'
+}
+
+function splitFullName(fullName: string) {
+  const [owner, name] = fullName.split('/')
+  return { owner, name }
+}
+
+function calculateScore(repo?: RepoRecord, readme = '') {
+  const checklist: ScoreChecklist = {
+    hasReadme: Boolean(readme.trim()),
+    hasDetailedReadme: readme.trim().length > 300,
+    hasDescription: Boolean(repo?.description.trim()),
+    hasHomepage: Boolean(repo?.homepage.trim()),
+    hasTopics: (repo?.topics.length ?? 0) >= 3,
+  }
+  const total =
+    (checklist.hasReadme ? 25 : 0) +
+    (checklist.hasDetailedReadme ? 20 : 0) +
+    (checklist.hasDescription ? 20 : 0) +
+    (checklist.hasHomepage ? 20 : 0) +
+    (checklist.hasTopics ? 15 : 0)
+
+  return { total, checklist }
+}
+
+function toGenerationInput(repo: RepoRecord, readme: string): RepoGenerationInput {
   return {
     id: repo.id,
     name: repo.name,
@@ -542,25 +690,46 @@ function toGenerationInput(repo: RepoRecord): RepoGenerationInput {
     description: repo.description,
     homepage: repo.homepage,
     topics: repo.topics,
-    readmeWordCount: repo.readmeWordCount,
-    readmeExcerpt: repo.readmeExcerpt ?? '',
+    readmeWordCount: countWords(readme),
+    readmeExcerpt: truncateForPrompt(readme),
+    existingReadme: truncateForPrompt(readme),
     issues: repo.issues.map((issue) => `${issue.label}: ${issue.detail}`),
   }
 }
 
-function formatPreview(preview: AiSuggestions) {
-  return [
-    `Repo: ${preview.repoName}`,
-    `Commit summary: ${preview.commitSummary}`,
-    '',
-    `Description:\n${preview.suggestedDescription}`,
-    '',
-    `Topics:\n${preview.suggestedTopics.join(', ')}`,
-    '',
-    `Deploy suggestions:\n${preview.deploySuggestions.join('\n')}`,
-    '',
-    `README:\n${preview.suggestedReadme}`,
-  ].join('\n')
+function buttonClass(theme: Theme, variant: 'primary' | 'secondary' | 'ghost', extra = '') {
+  const base =
+    'inline-flex h-10 items-center justify-center rounded-lg px-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50'
+  const styles = {
+    primary:
+      theme === 'dark'
+        ? 'bg-cyan-300 text-slate-950 hover:bg-cyan-200'
+        : 'bg-slate-950 text-white hover:bg-slate-800',
+    secondary:
+      theme === 'dark'
+        ? 'border border-white/10 bg-white/[0.06] text-slate-100 hover:bg-white/[0.1]'
+        : 'border border-slate-300 bg-white text-slate-900 hover:bg-slate-50',
+    ghost:
+      theme === 'dark'
+        ? 'text-slate-300 hover:bg-white/[0.08]'
+        : 'text-slate-700 hover:bg-slate-100',
+  }
+
+  return `${base} ${styles[variant]} ${extra}`
+}
+
+function inputClass(theme: Theme) {
+  return `mt-1 h-10 w-full rounded-lg border px-3 text-sm outline-none transition ${
+    theme === 'dark'
+      ? 'border-white/10 bg-black/20 text-slate-100 placeholder:text-slate-500 focus:border-cyan-300/70'
+      : 'border-slate-300 bg-white text-slate-950 placeholder:text-slate-400 focus:border-slate-950'
+  }`
+}
+
+function resolveError(error: unknown, fallback: string) {
+  return error instanceof GitHubClientError || error instanceof Error
+    ? error.message
+    : fallback
 }
 
 function countWords(value: string) {
@@ -569,7 +738,7 @@ function countWords(value: string) {
 
 function truncateForPrompt(value: string) {
   const trimmed = value.trim()
-  return trimmed.length > 4000 ? `${trimmed.slice(0, 4000)}...` : trimmed
+  return trimmed.length > 7000 ? `${trimmed.slice(0, 7000)}...` : trimmed
 }
 
 export default App

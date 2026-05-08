@@ -6,12 +6,13 @@ GitTidy is an AI-assisted repository cleanup tool for students and indie develop
 
 The MVP is intentionally narrow:
 
-- Authenticate with GitHub in the simplest viable way.
+- Authenticate with GitHub OAuth.
 - Fetch a user's repositories.
 - Score each repository on a few visible quality signals.
 - Let the user inspect one repository in detail.
 - Generate improved repo content with OpenRouter.
-- Let the user copy outputs and apply changes manually later.
+- Let the user copy outputs or apply optional GitHub write-back only after
+  confirmation.
 
 ## Users
 
@@ -27,16 +28,16 @@ The MVP is intentionally narrow:
 
 ## Non-Goals
 
-- Full repository editing or commit/push automation.
+- Automatic repository editing.
 - Multi-user collaboration.
 - Historical analytics.
 - Complex GitHub org admin workflows.
-- OAuth setup that requires a large auth subsystem on day one.
+- Database-backed sessions or a large auth subsystem.
 
 ## Core User Flow
 
 1. User opens GitTidy.
-2. User authenticates with GitHub or provides a GitHub token in a scoped MVP flow.
+2. User authenticates with GitHub OAuth.
 3. App fetches repositories via GitHub API.
 4. User browses repo cards with a quality score.
 5. User selects a repo.
@@ -51,13 +52,13 @@ The MVP is intentionally narrow:
    - improved description
    - suggested topics
    - deploy suggestions
-9. User copies outputs for manual use.
+9. User copies outputs or explicitly confirms a GitHub write-back action.
 
 ## MVP Functional Requirements
 
 ### Repository Dashboard
 
-- Display repository cards in a responsive grid.
+- Display a simple repository list.
 - Each card shows:
   - repo name
   - description or missing-description status
@@ -68,16 +69,22 @@ The MVP is intentionally narrow:
   - key issue badges
 - Allow selecting a repository card to open detail analysis.
 
-### Repository Analysis
+### Repository Detail And Analysis
 
-- Calculate a simple score from 0-100.
-- Score should be deterministic and explainable.
-- Initial scoring inputs:
-  - README present and non-trivial
-  - description present
-  - homepage present
-  - topics count greater than zero
+- When a repo is clicked, fetch:
+  - `GET /repos/{owner}/{repo}`
+  - `GET /repos/{owner}/{repo}/readme`
+- Decode the README API response from base64.
+- Show the existing README in a preview panel.
+- Calculate a deterministic score from 0-100:
+  - README exists: 25 points
+  - README longer than 300 characters: 20 points
+  - description exists: 20 points
+  - homepage/deploy link exists: 20 points
+  - at least 3 topics exist: 15 points
 - Show issue-level feedback, not just the score.
+- Show this warning when homepage is empty:
+  `No deployed URL detected. Add a Vercel link so people can actually click the thing you built.`
 
 ### AI Suggestions
 
@@ -86,16 +93,18 @@ The MVP is intentionally narrow:
 - Generate:
   - replacement README markdown
   - short repository description
-  - 3-5 topic suggestions
+  - 5-8 topic suggestions
   - deployment suggestions based on repo type
 
-### Copy Actions
+### Copy And Write Actions
 
-- Provide copy actions for:
-  - generated README
-  - generated description
-  - generated topics
-  - generated deploy suggestions
+- Provide a generated README preview panel.
+- Provide a `Copy README` action.
+- Provide optional write-back actions:
+  - `Update README on GitHub`
+  - `Update repo description/topics/homepage`
+- Show a confirmation modal before any GitHub write action.
+- Never auto-write to GitHub.
 - Show lightweight success or failure feedback.
 
 ### Error Handling
@@ -110,9 +119,9 @@ The MVP is intentionally narrow:
 ## UX Requirements
 
 - Responsive from mobile through desktop.
-- Fast first interaction with mock data even before live GitHub setup.
-- Visual direction: dark productivity UI with bright accents and clear scoring states.
-- Dense enough to scan multiple repos quickly without looking like admin clutter.
+- Dark background by default.
+- Provide a light/dark toggle.
+- Keep the interface sleek and focused rather than dashboard-heavy.
 
 ## Technical Architecture
 
@@ -134,19 +143,13 @@ The MVP is intentionally narrow:
 - GitHub API for repository metadata and README lookup.
 - OpenRouter for text generation.
 
-## Simplified Auth Strategy
+## Auth Strategy
 
-The MVP should avoid full OAuth complexity unless needed for deployment target constraints.
-
-Preferred first implementation:
-
-- Support a user-provided GitHub personal access token in the client.
-- Store token in local state or local storage with clear caveats.
-- Use fine-grained or classic tokens with repo-read scope guidance.
-
-Future option:
-
-- Upgrade to GitHub OAuth via serverless callback once product value is validated.
+- Use GitHub OAuth through serverless callback endpoints.
+- Store the returned access token client-side for the MVP.
+- Request repo scope because optional write-back needs repository contents and
+  metadata permissions.
+- Keep all writes behind explicit confirmation modals.
 
 ## Data Model
 
@@ -176,10 +179,10 @@ Future option:
 - `topics`
 - `homepage`
 - `language`
-- `suggestedDescription`
-- `suggestedReadme`
-- `suggestedTopics`
-- `deploySuggestions`
+- `readme_md`
+- `description`
+- `topics`
+- `deploy_suggestion`
 
 ## Delivery Phases
 
@@ -191,7 +194,7 @@ Future option:
 
 ### Phase 2
 
-- GitHub token entry flow
+- GitHub OAuth flow
 - GitHub API integration
 - real repo fetch
 - repo scoring utilities
@@ -200,11 +203,12 @@ Future option:
 
 - serverless OpenRouter function
 - AI generation UI
-- generated content panels
+- existing and generated README preview panels
 
 ### Phase 4
 
 - copy actions
+- optional confirmed write-back actions
 - loading and error states
 - responsive polish
 - basic empty states
@@ -212,8 +216,8 @@ Future option:
 ## Acceptance Criteria
 
 - App runs locally and builds successfully.
-- Mock dashboard is usable before live integrations are configured.
-- At least one selected repo view shows score, issues, and generated content placeholders.
-- Live GitHub fetch works with a supplied token.
+- Selected repo view shows score checklist and existing README preview.
+- Live GitHub fetch works after OAuth.
 - OpenRouter generation works through a serverless endpoint.
-- Copy actions work for generated outputs.
+- Copy action works for generated README.
+- GitHub write actions require confirmation and never run automatically.

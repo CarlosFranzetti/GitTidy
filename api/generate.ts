@@ -12,6 +12,7 @@ type GenerateBody = {
     topics: string[]
     readmeWordCount: number
     readmeExcerpt: string
+    existingReadme?: string
     issues: string[]
   }>
   context: {
@@ -58,24 +59,27 @@ export default async function handler(
 
 async function createOpenRouterCompletion(apiKey: string, body: GenerateBody) {
   const systemPrompt = [
-    'You are GitTidy, an AI assistant that improves GitHub repository presentation for students and indie developers.',
-    'Return valid JSON only.',
-    'Be practical and specific.',
-    'Do not invent unsupported features.',
-    'Topics must be 3 to 5 lowercase hyphenated strings.',
-    'Deploy suggestions must be short actionable strings.',
-    'Generate previewable repository changes only. Do not claim anything was committed.',
-    'Return this exact JSON shape: {"previews":[{"repoName":"string","suggestedDescription":"string","suggestedReadme":"string","suggestedTopics":["string"],"deploySuggestions":["string"],"commitSummary":"string"}]}',
+    'You are improving a GitHub repo presentation.',
+    'Return JSON only.',
+    'The JSON must use this exact shape: {"readme_md":"A polished README in markdown with title, tagline, features, tech stack, setup, demo link section, screenshots placeholder, and future improvements.","description":"Short GitHub repo description under 160 characters.","topics":["5","to","8","github","topics"],"deploy_suggestion":"Short suggestion if no homepage exists."}',
+    'Tone: Fun, clear, student-builder friendly.',
+    'No fake claims.',
+    'Do not invent features.',
+    'Topics must be 5 to 8 lowercase GitHub topics.',
   ].join(' ')
+  const primaryRepo = body.repos[0]
   const userPrompt = [
-    `Project goal: ${body.context.projectGoal || 'Not provided'}`,
-    `Audience: ${body.context.audience || 'Not provided'}`,
-    `Deploy target: ${body.context.deployTarget || 'Not provided'}`,
-    `Tone: ${body.context.tone || 'clear and practical'}`,
+    `Repo name: ${primaryRepo?.fullName || primaryRepo?.name || 'Unknown'}`,
+    `Current description: ${primaryRepo?.description || 'None'}`,
+    `Language: ${primaryRepo?.language || 'Unknown'}`,
+    `Homepage URL: ${primaryRepo?.homepage || 'None'}`,
+    `Topics: ${(primaryRepo?.topics ?? []).join(', ') || 'None'}`,
+    `Project goal: ${body.context.projectGoal || 'Infer from the repository.'}`,
+    `Audience: ${body.context.audience || 'students, recruiters, collaborators, and indie builders'}`,
+    `Deploy target: ${body.context.deployTarget || 'Infer if possible.'}`,
     `Extra notes: ${body.context.extraNotes || 'None'}`,
-    'Repositories:',
-    JSON.stringify(body.repos, null, 2),
-    'For each repository, preview a tighter GitHub description, improved README markdown, suggested topics, deploy suggestions, and a concise commit summary.',
+    'Existing README:',
+    primaryRepo?.existingReadme || primaryRepo?.readmeExcerpt || 'No README provided.',
   ].join('\n')
 
   const openRouterResponse = await callOpenRouter(apiKey, {
@@ -105,7 +109,7 @@ async function createOpenRouterCompletion(apiKey: string, body: GenerateBody) {
     throw statusError('OpenRouter returned an empty response.', 502)
   }
 
-  return normalizePreviewPayload(parseModelJson(content))
+  return normalizePreviewPayload(primaryRepo?.name ?? 'Repository', parseModelJson(content))
 }
 
 async function callOpenRouter(apiKey: string, body: unknown) {
@@ -168,25 +172,23 @@ function previewText(value: string) {
   return value.trim().slice(0, 240) || 'No response body.'
 }
 
-function normalizePreviewPayload(value: unknown) {
+function normalizePreviewPayload(repoName: string, value: unknown) {
   if (isPreviewEnvelope(value)) {
     return value
   }
 
-  if (Array.isArray(value)) {
-    if (value.every(isPreviewItem)) {
-      return { previews: value }
+  if (isPromptResult(value)) {
+    return {
+      previews: [
+        {
+          repoName,
+          readmeMd: value.readme_md,
+          description: value.description,
+          topics: value.topics,
+          deploySuggestion: value.deploy_suggestion,
+        },
+      ],
     }
-
-    const first = value[0]
-
-    if (isPreviewEnvelope(first)) {
-      return first
-    }
-  }
-
-  if (isPreviewItem(value)) {
-    return { previews: [value] }
   }
 
   throw statusError('OpenRouter preview response had the wrong shape.', 502)
@@ -201,12 +203,23 @@ function isPreviewEnvelope(value: unknown): value is { previews: unknown[] } {
   )
 }
 
-function isPreviewItem(value: unknown) {
+function isPromptResult(value: unknown): value is {
+  readme_md: string
+  description: string
+  topics: string[]
+  deploy_suggestion: string
+} {
   return (
     typeof value === 'object' &&
     value !== null &&
-    'repoName' in value &&
-    'suggestedReadme' in value
+    'readme_md' in value &&
+    'description' in value &&
+    'topics' in value &&
+    'deploy_suggestion' in value &&
+    typeof value.readme_md === 'string' &&
+    typeof value.description === 'string' &&
+    Array.isArray(value.topics) &&
+    typeof value.deploy_suggestion === 'string'
   )
 }
 
