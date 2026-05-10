@@ -25,7 +25,14 @@
   3. The "Apply Selected" button is visible and disabled when zero items are checked, and enabled as soon as at least one item is checked
   4. Clicking "Apply Selected" opens a single confirmation modal that explicitly lists every item about to be written — no surprises
   5. After confirming, only the checked items are written to GitHub; unchecked items are left unchanged on the repo
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+**Wave 1**
+- [ ] 01-01-PLAN.md — WriteSelection type and state foundation (App.tsx)
+- [ ] 01-03-PLAN.md — Unified write handler and confirmation modal (App.tsx)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 01-02-PLAN.md — Checkbox UI and Apply Selected button (App.tsx)
 **UI hint**: yes
 
 ---
@@ -34,7 +41,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Selective Write-Back | 0/0 | Not started | - |
+| 1. Selective Write-Back | 0/3 | Not started | - |
 
 ---
 
