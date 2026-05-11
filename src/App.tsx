@@ -113,8 +113,8 @@ function App() {
       : 'min-h-dvh bg-slate-50 text-slate-950'
   const panelClass =
     theme === 'dark'
-      ? 'border-white/[0.08] bg-white/[0.06] shadow-2xl shadow-violet-950/50'
-      : 'border-slate-200 bg-white shadow-xl shadow-slate-200/60'
+      ? 'border-white/[0.08] bg-white/[0.05] shadow-2xl shadow-violet-950/60 ring-1 ring-inset ring-white/[0.04]'
+      : 'border-slate-200/80 bg-white shadow-xl shadow-slate-200/70 ring-1 ring-inset ring-slate-100'
   const mutedText = theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
 
   useEffect(() => {
@@ -261,11 +261,11 @@ function App() {
 
   // ─── Detail / main content ────────────────────────────────────────────────
   const detailContent = !activeRepo ? (
-    <div className="flex flex-col items-start gap-3">
+    <div className="flex h-full flex-col">
       <button
         type="button"
         onClick={goBack}
-        className={`md:hidden ${buttonClass(theme, 'ghost', '-ml-3')}`}
+        className={`md:hidden self-start ${buttonClass(theme, 'ghost', '-ml-3')}`}
       >
         ← Back to repos
       </button>
@@ -571,10 +571,16 @@ function App() {
   return (
     <main className={appClass}>
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-5 sm:px-6 lg:px-8">
-        <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-5 md:flex-row md:items-center md:justify-between">
+        <header className={`mb-5 flex flex-col gap-4 pb-5 md:flex-row md:items-center md:justify-between border-b ${theme === 'dark' ? 'border-white/10' : 'border-slate-200'}`}>
           <div>
             <p className={`text-sm font-medium ${mutedText}`}>GitTidy</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-[-0.02em] md:text-4xl">
+            <h1
+              className={`mt-1 text-3xl font-bold tracking-[-0.02em] md:text-4xl ${
+                theme === 'dark'
+                  ? 'bg-gradient-to-r from-white via-slate-200 to-violet-300 bg-clip-text text-transparent'
+                  : 'text-slate-900'
+              }`}
+            >
               Polish the repo before anyone clicks it.
             </h1>
             <p className={`mt-2 max-w-2xl text-sm leading-6 ${mutedText}`}>
@@ -951,17 +957,41 @@ function App() {
 
 function EmptyState({ theme }: { theme: Theme }) {
   return (
-    <div className="grid min-h-[520px] place-items-center text-center">
-      <div className="max-w-md">
+    <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-6 py-16 text-center">
+      {/* Radial glow */}
+      <div
+        className={`pointer-events-none absolute inset-0 ${
+          theme === 'dark'
+            ? 'bg-[radial-gradient(ellipse_60%_50%_at_50%_40%,rgba(139,92,246,0.12)_0%,transparent_100%)]'
+            : 'bg-[radial-gradient(ellipse_60%_50%_at_50%_40%,rgba(139,92,246,0.07)_0%,transparent_100%)]'
+        }`}
+      />
+
+      <div className="relative max-w-sm">
+        {/* Logo with gradient + shine */}
         <div
-          className={`mx-auto grid h-14 w-14 place-items-center rounded-2xl text-2xl font-semibold ${
-            theme === 'dark' ? 'bg-violet-500/20 text-violet-300' : 'bg-slate-950 text-white'
+          className={`relative mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl text-3xl font-bold tracking-tight shadow-2xl ${
+            theme === 'dark'
+              ? 'bg-gradient-to-br from-violet-400 to-violet-700 text-white shadow-violet-900/70'
+              : 'bg-gradient-to-br from-slate-700 to-slate-950 text-white shadow-slate-900/40'
           }`}
         >
-          GT
+          <div className="absolute inset-0 bg-gradient-to-br from-white/25 via-transparent to-transparent" />
+          <span className="relative">GT</span>
         </div>
-        <h2 className="mt-5 text-2xl font-semibold">Pick a repo to tidy.</h2>
-        <p className={`mt-2 text-sm leading-6 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+
+        <h2
+          className={`mt-7 text-4xl font-bold tracking-tight ${
+            theme === 'dark' ? 'text-white' : 'text-slate-900'
+          }`}
+        >
+          Pick a repo to tidy.
+        </h2>
+        <p
+          className={`mx-auto mt-3 max-w-xs text-base leading-relaxed ${
+            theme === 'dark' ? 'text-slate-400' : 'text-slate-500'
+          }`}
+        >
           GitTidy fetches the repo metadata and README on click, then previews
           AI changes before any write-back button can run.
         </p>
