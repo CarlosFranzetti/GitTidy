@@ -9,7 +9,7 @@
 
 ## Phases
 
-- [ ] **Phase 1: Selective Write-Back** - Replace individual write buttons with checkboxes and a single "Apply Selected" button that writes only what the user chose
+- [x] **Phase 1: Selective Write-Back** - Replace individual write buttons with checkboxes and a single "Apply Selected" button that writes only what the user chose
 
 ---
 
@@ -29,10 +29,10 @@
 Plans:
 **Wave 1**
 - [x] 01-01-PLAN.md — WriteSelection type and state foundation (App.tsx)
-- [ ] 01-03-PLAN.md — Unified write handler and confirmation modal (App.tsx)
+- [x] 01-03-PLAN.md — Unified write handler and confirmation modal (App.tsx) *(superseded, merged into 01-01/01-02)*
 
-**Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 01-02-PLAN.md — Checkbox UI and Apply Selected button (App.tsx)
+**Wave 2**
+- [x] 01-02-PLAN.md — Checkbox UI and Apply Selected button (App.tsx)
 **UI hint**: yes
 
 ---
@@ -41,7 +41,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Selective Write-Back | 1/3 | In Progress|  |
+| 1. Selective Write-Back | 3/3 | Complete | 2026-05-11 |
 
 ---
 
