@@ -170,21 +170,38 @@ function parseJson<T>(value: string, message: string): T {
 }
 
 function parseModelJson(value: string) {
-  const fenced = value.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]
-  const candidate = fenced ?? value
-  const start = candidate.indexOf('{')
-  const end = candidate.lastIndexOf('}')
-  const json = start >= 0 && end > start ? candidate.slice(start, end + 1) : candidate
-
+  // 1. Direct parse — works when the model returns raw JSON (even with code blocks inside string values)
   try {
-    return JSON.parse(json)
+    return JSON.parse(value.trim())
   } catch {
-    const error = Object.assign(
-      new Error('OpenRouter returned invalid JSON content.'),
-      { status: 502, rawContent: value },
-    )
-    throw error
+    // fall through
   }
+
+  // 2. Model wrapped response in ```json ... ``` fences
+  const fenced = value.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1]
+  if (fenced) {
+    try {
+      return JSON.parse(fenced.trim())
+    } catch {
+      // fall through
+    }
+  }
+
+  // 3. Extract outermost { … } from surrounding prose
+  const start = value.indexOf('{')
+  const end = value.lastIndexOf('}')
+  if (start >= 0 && end > start) {
+    try {
+      return JSON.parse(value.slice(start, end + 1))
+    } catch {
+      // fall through
+    }
+  }
+
+  throw Object.assign(
+    new Error('OpenRouter returned invalid JSON content.'),
+    { status: 502, rawContent: value },
+  )
 }
 
 function statusError(message: string, status: number) {
