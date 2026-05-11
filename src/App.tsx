@@ -208,11 +208,9 @@ function App() {
             ) : (
               <div className="space-y-2">
                 {repos.map((repo) => (
-                  <button
+                  <div
                     key={repo.id}
-                    type="button"
-                    onClick={() => void selectRepo(repo)}
-                    className={`w-full rounded-xl border p-3 text-left transition ${
+                    className={`relative rounded-xl border transition ${
                       activeRepo?.repo.id === repo.id
                         ? theme === 'dark'
                           ? 'border-violet-400/60 bg-violet-400/[0.08]'
@@ -222,17 +220,48 @@ function App() {
                           : 'border-slate-200 bg-white hover:border-slate-400'
                     }`}
                   >
-                    <span className="block truncate text-sm font-semibold">{repo.fullName}</span>
-                    <span
-                      className={`mt-1 block truncate text-xs ${
-                        activeRepo?.repo.id === repo.id && theme === 'light'
-                          ? 'text-slate-300'
-                          : mutedText
-                      }`}
+                    <button
+                      type="button"
+                      onClick={() => void selectRepo(repo)}
+                      className="block w-full p-3 pr-16 text-left"
                     >
-                      {repo.language} · {repo.description || 'No description yet'}
-                    </span>
-                  </button>
+                      <span className="block truncate text-sm font-semibold">{repo.fullName}</span>
+                      <span
+                        className={`mt-1 block truncate text-xs ${
+                          activeRepo?.repo.id === repo.id && theme === 'light'
+                            ? 'text-slate-300'
+                            : mutedText
+                        }`}
+                      >
+                        {repo.language} · {repo.description || 'No description yet'}
+                      </span>
+                    </button>
+                    <div className="absolute right-2 top-2.5 flex items-center gap-1.5">
+                      <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
+                        activeRepo?.repo.id === repo.id && theme === 'light'
+                          ? 'bg-white/20 text-white'
+                          : theme === 'dark'
+                            ? 'bg-white/10 text-slate-300'
+                            : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {repo.score}
+                      </span>
+                      <a
+                        href={`https://github.com/${repo.fullName}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        title={`Open on GitHub`}
+                        className={`rounded p-0.5 text-xs opacity-50 transition hover:opacity-100 ${
+                          activeRepo?.repo.id === repo.id && theme === 'light'
+                            ? 'text-white'
+                            : mutedText
+                        }`}
+                      >
+                        ↗
+                      </a>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -252,9 +281,19 @@ function App() {
                 <div className="flex flex-col gap-4 border-b border-white/10 pb-5 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0">
                     <p className={`text-sm ${mutedText}`}>Selected repo</p>
-                    <h2 className="mt-1 truncate text-2xl font-semibold">
-                      {activeRepo.repo.fullName}
-                    </h2>
+                    <div className="mt-1 flex items-baseline gap-2">
+                      <h2 className="truncate text-2xl font-semibold">
+                        {activeRepo.repo.fullName}
+                      </h2>
+                      <a
+                        href={`https://github.com/${activeRepo.repo.fullName}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`shrink-0 text-sm opacity-60 transition hover:opacity-100 ${mutedText}`}
+                      >
+                        ↗ GitHub
+                      </a>
+                    </div>
                     <p className={`mt-2 max-w-3xl text-sm leading-6 ${mutedText}`}>
                       {activeRepo.repo.description || 'No GitHub description yet.'}
                     </p>
