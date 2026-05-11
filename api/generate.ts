@@ -48,24 +48,36 @@ export default async function handler(
 
     return response.status(200).json(payload)
   } catch (error: unknown) {
+    const rawContent =
+      typeof error === 'object' &&
+      error !== null &&
+      'rawContent' in error &&
+      typeof (error as Record<string, unknown>).rawContent === 'string'
+        ? (error as { rawContent: string }).rawContent
+        : undefined
+
     return response.status(resolveStatus(error)).json({
       error:
         error instanceof Error
           ? error.message
           : 'AI preview generation failed.',
+      ...(rawContent !== undefined ? { rawContent } : {}),
     })
   }
 }
 
 async function createOpenRouterCompletion(apiKey: string, body: GenerateBody) {
   const systemPrompt = [
-    'You are improving a GitHub repo presentation.',
-    'Return JSON only.',
-    'The JSON must use this exact shape: {"readme_md":"A polished README in markdown with title, tagline, features, tech stack, setup, demo link section, screenshots placeholder, and future improvements.","description":"Short GitHub repo description under 160 characters.","topics":["5","to","8","github","topics"],"deploy_suggestion":"Short suggestion if no homepage exists."}',
+    'You are a JSON API. You MUST respond with ONLY a raw JSON object.',
+    'Do NOT include markdown. Do NOT use backticks. Do NOT add any explanation or commentary.',
+    'Do NOT write any text before or after the JSON object.',
+    'The response must start with { and end with } and contain nothing else.',
+    'Use this exact shape:',
+    '{"readme_md":"A polished README in markdown with title, tagline, features, tech stack, setup, demo link section, screenshots placeholder, and future improvements.","description":"Short GitHub repo description under 160 characters.","topics":["5","to","8","github","topics"],"deploy_suggestion":"Short suggestion if no homepage exists."}',
     'Tone: Fun, clear, student-builder friendly.',
-    'No fake claims.',
-    'Do not invent features.',
+    'No fake claims. Do not invent features.',
     'Topics must be 5 to 8 lowercase GitHub topics.',
+    'Return ONLY valid JSON. Do not include markdown. Do not include backticks. Do not include explanations.',
   ].join(' ')
   const primaryRepo = body.repos[0]
   const userPrompt = [
@@ -150,7 +162,15 @@ function parseModelJson(value: string) {
   const end = candidate.lastIndexOf('}')
   const json = start >= 0 && end > start ? candidate.slice(start, end + 1) : candidate
 
-  return parseJson(json, 'OpenRouter returned invalid JSON content.')
+  try {
+    return JSON.parse(json)
+  } catch {
+    const error = Object.assign(
+      new Error('OpenRouter returned invalid JSON content.'),
+      { status: 502, rawContent: value },
+    )
+    throw error
+  }
 }
 
 function statusError(message: string, status: number) {

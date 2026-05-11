@@ -31,12 +31,16 @@ async function postJson<T extends object>(path: string, input: unknown) {
   }
 
   const contentType = response.headers.get('content-type') ?? ''
-  const payload: T | { error?: string } = contentType.includes('application/json')
-    ? ((await response.json()) as T | { error?: string })
+  const payload: T | { error?: string; rawContent?: string } = contentType.includes(
+    'application/json',
+  )
+    ? ((await response.json()) as T | { error?: string; rawContent?: string })
     : { error: 'The AI endpoint returned a non-JSON response.' }
 
   if (!response.ok) {
-    throw new Error(('error' in payload && payload.error) || 'Generation failed.')
+    const message = ('error' in payload && payload.error) || 'Generation failed.'
+    const rawContent = 'rawContent' in payload ? (payload.rawContent as string | undefined) : undefined
+    throw Object.assign(new Error(message), { rawContent })
   }
 
   return payload as T
