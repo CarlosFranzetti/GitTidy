@@ -644,17 +644,27 @@ function App() {
         </div>
       </div>
 
-      {/* Generation progress bar */}
+      {/* Generation overlay with macOS-style spinner */}
       {isGenerating ? (
-        <div className="fixed inset-x-0 top-0 z-50 h-[3px] overflow-hidden">
-          <div
-            className={`h-full w-3/5 rounded-full ${
-              theme === 'dark'
-                ? 'bg-gradient-to-r from-violet-600 via-violet-300 to-violet-600'
-                : 'bg-gradient-to-r from-slate-700 via-slate-400 to-slate-700'
-            }`}
-            style={{ animation: 'slide-progress 1.4s ease-in-out infinite' }}
-          />
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/35 backdrop-blur-[2px]">
+          <svg
+            viewBox="0 0 24 24"
+            className="h-20 w-20 drop-shadow-2xl"
+            style={{ animation: 'macos-spin 0.9s steps(12, end) infinite' }}
+          >
+            {Array.from({ length: 12 }, (_, i) => (
+              <line
+                key={i}
+                x1="12" y1="3.5" x2="12" y2="7"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                stroke="white"
+                opacity={(i + 1) / 12}
+                transform={`rotate(${i * 30} 12 12)`}
+              />
+            ))}
+          </svg>
+          <p className="text-sm font-medium text-white/70 tracking-wide">Generating…</p>
         </div>
       ) : null}
 

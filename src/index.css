@@ -26,8 +26,7 @@ body {
   min-height: 100dvh;
 }
 
-@keyframes slide-progress {
-  0%   { transform: translateX(-100%); }
-  60%  { transform: translateX(40%); }
-  100% { transform: translateX(100%); }
+@keyframes macos-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }

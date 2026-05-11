@@ -300,6 +300,6 @@ function resolveErrorMessage(status: number) {
     case 403:
       return 'GitHub rate limited or denied the request. Write actions may need repo permission.'
     default:
-      return 'GitHub request failed. Try again in mock mode or verify the token.'
+      return 'GitHub request failed. Check your connection or sign in again.'
   }
 }
