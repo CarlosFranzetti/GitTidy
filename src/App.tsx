@@ -7,6 +7,8 @@ import {
   fetchRepositoryReadme,
   fetchViewer,
   GitHubClientError,
+  updateRepositoryReadme,
+  updateRepositoryMetadata,
 } from './features/github/client'
 import { normalizeGitHubRepo } from './features/github/normalize'
 import { copyText } from './lib/clipboard'
@@ -82,6 +84,8 @@ function App() {
     () => calculateScore(activeRepo?.repo, activeRepo?.readme ?? ''),
     [activeRepo],
   )
+
+  const selectedOwnerRepo = activeRepo ? splitFullName(activeRepo.repo.fullName) : null
 
   const appClass =
     theme === 'dark'
@@ -346,6 +350,7 @@ function App() {
                       </button>
                       <button
                         type="button"
+                        onClick={confirmApplySelected}
                         disabled={
                           !writeSelection.readme &&
                           !writeSelection.description &&
@@ -502,6 +507,64 @@ function App() {
     setWriteSelection((current) =>
       current ? { ...current, [field]: !current[field] } : current,
     )
+  }
+
+  function confirmApplySelected() {
+    if (!activeRepo || !generated || !selectedOwnerRepo || !writeSelection) return
+
+    const selectedItems: string[] = []
+    if (writeSelection.readme) selectedItems.push('README rewrite')
+    if (writeSelection.description) selectedItems.push('Description')
+    if (writeSelection.topics) selectedItems.push('Topics')
+    if (writeSelection.homepage) selectedItems.push('Deploy suggestion / homepage')
+
+    if (selectedItems.length === 0) return
+
+    const itemList = selectedItems.map((item) => `• ${item}`).join('\n')
+    const modalBody =
+      `The following items will be written to ${activeRepo.repo.fullName}:\n\n${itemList}\n\n` +
+      'Items you left unchecked will not be changed.'
+
+    setPendingAction({
+      title: 'Apply selected improvements?',
+      body: modalBody,
+      confirmLabel: `Apply ${selectedItems.length} item${selectedItems.length === 1 ? '' : 's'}`,
+      run: async () => {
+        if (writeSelection.readme) {
+          await updateRepositoryReadme({
+            owner: selectedOwnerRepo.owner,
+            repo: selectedOwnerRepo.name,
+            token: githubToken,
+            content: generated.readmeMd,
+            sha: activeRepo.readmeSha,
+          })
+        }
+
+        const needsMetadata =
+          writeSelection.description ||
+          writeSelection.topics ||
+          writeSelection.homepage
+
+        if (needsMetadata) {
+          await updateRepositoryMetadata({
+            owner: selectedOwnerRepo.owner,
+            repo: selectedOwnerRepo.name,
+            token: githubToken,
+            description: writeSelection.description
+              ? generated.description
+              : activeRepo.repo.description,
+            topics: writeSelection.topics
+              ? generated.topics
+              : activeRepo.repo.topics,
+            homepage: writeSelection.homepage
+              ? homepageDraft.trim()
+              : activeRepo.repo.homepage,
+          })
+        }
+
+        await selectRepo(activeRepo.repo)
+      },
+    })
   }
 
   async function runPendingAction() {
