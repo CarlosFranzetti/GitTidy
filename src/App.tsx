@@ -644,6 +644,20 @@ function App() {
         </div>
       </div>
 
+      {/* Generation progress bar */}
+      {isGenerating ? (
+        <div className="fixed inset-x-0 top-0 z-50 h-[3px] overflow-hidden">
+          <div
+            className={`h-full w-3/5 rounded-full ${
+              theme === 'dark'
+                ? 'bg-gradient-to-r from-violet-600 via-violet-300 to-violet-600'
+                : 'bg-gradient-to-r from-slate-700 via-slate-400 to-slate-700'
+            }`}
+            style={{ animation: 'slide-progress 1.4s ease-in-out infinite' }}
+          />
+        </div>
+      ) : null}
+
       {pendingAction ? (
         <ConfirmationModal
           action={pendingAction}
