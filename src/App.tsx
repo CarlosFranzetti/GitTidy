@@ -86,11 +86,22 @@ function App() {
   const [refinementInput, setRefinementInput] = useState('')
   const [isRefining, setIsRefining] = useState(false)
   const [codeContext, setCodeContext] = useState('')
+  const [sortAsc, setSortAsc] = useState(true)
+  const [repoFilter, setRepoFilter] = useState('')
+  const [editedDescription, setEditedDescription] = useState('')
+  const [editedTopics, setEditedTopics] = useState('')
 
   const score = useMemo(
     () => calculateScore(activeRepo?.repo, activeRepo?.readme ?? ''),
     [activeRepo],
   )
+
+  const displayedRepos = useMemo(() => {
+    const filtered = repoFilter
+      ? repos.filter((r) => r.fullName.toLowerCase().includes(repoFilter.toLowerCase()))
+      : repos
+    return [...filtered].sort((a, b) => sortAsc ? a.score - b.score : b.score - a.score)
+  }, [repos, repoFilter, sortAsc])
 
   const selectedOwnerRepo = activeRepo ? splitFullName(activeRepo.repo.fullName) : null
 
@@ -185,7 +196,7 @@ function App() {
                   {githubToken
                     ? isLoadingRepos
                       ? 'Loading GitHub repos...'
-                      : `${repos.length} available`
+                      : `${displayedRepos.length}${repoFilter ? ` of ${repos.length}` : ` of ${repos.length}`} repos`
                     : 'OAuth required'}
                 </p>
               </div>
@@ -200,6 +211,29 @@ function App() {
               ) : null}
             </div>
 
+            {githubToken && !isLoadingRepos && repos.length > 0 ? (
+              <div className="mb-3 flex gap-2">
+                <input
+                  value={repoFilter}
+                  onChange={(e) => setRepoFilter(e.target.value)}
+                  placeholder="Filter repos..."
+                  className={`h-9 flex-1 rounded-lg border px-3 text-sm outline-none transition duration-150 ${
+                    theme === 'dark'
+                      ? 'border-white/10 bg-black/20 text-slate-100 placeholder:text-slate-500 focus:border-violet-400/60'
+                      : 'border-slate-300 bg-white text-slate-950 placeholder:text-slate-400 focus:border-slate-950'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setSortAsc((v) => !v)}
+                  title={sortAsc ? 'Sorted: worst first — click for best first' : 'Sorted: best first — click for worst first'}
+                  className={buttonClass(theme, 'secondary')}
+                >
+                  {sortAsc ? '↑ Score' : '↓ Score'}
+                </button>
+              </div>
+            ) : null}
+
             {!githubToken ? (
               <div className={`rounded-xl border border-dashed p-4 text-sm leading-6 ${mutedText}`}>
                 GitHub OAuth is required to fetch repo details and write changes.
@@ -207,7 +241,7 @@ function App() {
               </div>
             ) : (
               <div className="space-y-2">
-                {repos.map((repo) => (
+                {displayedRepos.map((repo) => (
                   <div
                     key={repo.id}
                     className={`relative rounded-xl border transition ${
@@ -336,7 +370,26 @@ function App() {
                         className={inputClass(theme)}
                       />
                     </label>
-                    {!generated ? (
+                    {!generated && score.total >= 80 ? (
+                      <div className={`rounded-xl border px-4 py-3 text-sm ${
+                        theme === 'dark'
+                          ? 'border-emerald-400/20 bg-emerald-400/[0.07] text-emerald-300'
+                          : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                      }`}>
+                        <p className="font-semibold">This repo already scores {score.total}/100.</p>
+                        <p className={`mt-0.5 text-xs ${theme === 'dark' ? 'text-emerald-400/80' : 'text-emerald-700'}`}>
+                          README, description, topics, and deploy link all look good.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => void handleGenerate()}
+                          disabled={isGenerating || activeRepo.isLoading}
+                          className={`mt-2 text-xs underline opacity-70 transition hover:opacity-100`}
+                        >
+                          {isGenerating ? 'Generating...' : 'Generate anyway'}
+                        </button>
+                      </div>
+                    ) : !generated ? (
                       <button
                         type="button"
                         onClick={() => void handleGenerate()}
@@ -458,6 +511,17 @@ function App() {
                         theme={theme}
                         onChange={() => toggleWriteSelection('description')}
                       />
+                      {writeSelection.description ? (
+                        <input
+                          value={editedDescription}
+                          onChange={(e) => setEditedDescription(e.target.value)}
+                          className={`ml-7 h-8 w-[calc(100%-1.75rem)] rounded-lg border px-3 text-sm outline-none transition duration-150 ${
+                            theme === 'dark'
+                              ? 'border-white/10 bg-black/20 text-slate-100 focus:border-violet-400/60'
+                              : 'border-slate-300 bg-white text-slate-950 focus:border-slate-950'
+                          }`}
+                        />
+                      ) : null}
                       <SelectionCheckbox
                         id="sel-topics"
                         label="Topics"
@@ -465,6 +529,18 @@ function App() {
                         theme={theme}
                         onChange={() => toggleWriteSelection('topics')}
                       />
+                      {writeSelection.topics ? (
+                        <input
+                          value={editedTopics}
+                          onChange={(e) => setEditedTopics(e.target.value)}
+                          placeholder="comma-separated topics"
+                          className={`ml-7 h-8 w-[calc(100%-1.75rem)] rounded-lg border px-3 text-sm outline-none transition duration-150 ${
+                            theme === 'dark'
+                              ? 'border-white/10 bg-black/20 text-slate-100 placeholder:text-slate-500 focus:border-violet-400/60'
+                              : 'border-slate-300 bg-white text-slate-950 placeholder:text-slate-400 focus:border-slate-950'
+                          }`}
+                        />
+                      ) : null}
                       <SelectionCheckbox
                         id="sel-homepage"
                         label="Deploy suggestion / homepage"
@@ -480,6 +556,13 @@ function App() {
                         className={buttonClass(theme, 'secondary')}
                       >
                         Copy README
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadReadme}
+                        className={buttonClass(theme, 'secondary')}
+                      >
+                        Download .md
                       </button>
                       <button
                         type="button"
@@ -549,6 +632,8 @@ function App() {
     setRefinementInput('')
     setRetryNotes('')
     setCodeContext('')
+    setEditedDescription('')
+    setEditedTopics('')
     setAppView('detail')
     setActiveRepo({ repo, readme: '', isLoading: true })
 
@@ -615,6 +700,8 @@ function App() {
       setGenerated(preview)
       if (preview) {
         setWriteSelection({ readme: true, description: true, topics: true, homepage: true })
+        setEditedDescription(preview.description)
+        setEditedTopics(preview.topics.join(', '))
       } else {
         setWriteSelection(null)
       }
@@ -697,10 +784,10 @@ function App() {
             repo: selectedOwnerRepo.name,
             token: githubToken,
             description: writeSelection.description
-              ? generated.description
+              ? editedDescription
               : activeRepo.repo.description,
             topics: writeSelection.topics
-              ? generated.topics
+              ? editedTopics.split(',').map((t) => t.trim()).filter(Boolean)
               : activeRepo.repo.topics,
             homepage: writeSelection.homepage
               ? homepageDraft.trim()
@@ -739,7 +826,20 @@ function App() {
     setRetryNotes('')
     setRetryTone('fun')
     setCodeContext('')
+    setEditedDescription('')
+    setEditedTopics('')
     setMessage('')
+  }
+
+  function handleDownloadReadme() {
+    if (!generated) return
+    const blob = new Blob([generated.readmeMd], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${activeRepo?.repo.name ?? 'README'}.md`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   async function handleRefine() {
@@ -767,6 +867,8 @@ function App() {
         setGenerated(preview)
         setRefinementInput('')
         setWriteSelection({ readme: true, description: true, topics: true, homepage: true })
+        setEditedDescription(preview.description)
+        setEditedTopics(preview.topics.join(', '))
       }
     } catch (error: unknown) {
       setMessage(resolveError(error, 'Refinement failed.'))
