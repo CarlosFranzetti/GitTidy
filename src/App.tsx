@@ -19,8 +19,6 @@ import type { RepoRecord } from './types/repo'
 
 const STORAGE_KEY = 'gittidy.github-token'
 const THEME_KEY = 'gittidy.theme'
-const DEPLOY_WARNING =
-  'No deployed URL detected. Add a Vercel link so people can actually click the thing you built.'
 
 type Theme = 'dark' | 'light'
 
@@ -272,17 +270,24 @@ function App() {
       <EmptyState theme={theme} />
     </div>
   ) : (
-    <div className="space-y-5">
-      <div className="flex items-center pb-1 md:hidden">
-        <button type="button" onClick={goBack} className={buttonClass(theme, 'ghost', '-ml-3')}>
+    <div className="space-y-3">
+      {/* Mobile back / Desktop switch-repo (shown only when list is hidden) */}
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={goBack} className={`md:hidden ${buttonClass(theme, 'ghost', '-ml-3')}`}>
           ← Repos
         </button>
+        {(isGenerating || generated) ? (
+          <button type="button" onClick={goBack} className={`hidden md:inline-flex ${buttonClass(theme, 'ghost', '-ml-3')}`}>
+            ← Switch repo
+          </button>
+        ) : null}
       </div>
-      <div className="flex flex-col gap-4 border-b border-white/10 pb-5 xl:flex-row xl:items-start xl:justify-between">
-        <div className="min-w-0">
-          <p className={`text-sm ${mutedText}`}>Selected repo</p>
-          <div className="mt-1 flex items-baseline gap-2">
-            <h2 className="truncate text-2xl font-semibold">
+
+      {/* Compact repo header */}
+      <div className={`flex flex-wrap items-center justify-between gap-2 border-b pb-3 ${theme === 'dark' ? 'border-white/10' : 'border-slate-200'}`}>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="truncate text-xl font-semibold">
               {activeRepo.repo.fullName}
             </h2>
             <a
@@ -297,43 +302,29 @@ function App() {
             >
               ↗ GitHub
             </a>
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${
+              theme === 'dark' ? 'bg-violet-500/20 text-violet-300' : 'bg-slate-100 text-slate-600'
+            }`}>
+              {score.total}/100
+            </span>
           </div>
-          <p className={`mt-2 max-w-3xl text-sm leading-6 ${mutedText}`}>
-            {activeRepo.repo.description || 'No GitHub description yet.'}
-          </p>
-          {!score.checklist.hasHomepage ? (
-            <div
-              className={`mt-3 rounded-lg border px-3 py-2 text-sm ${
-                theme === 'dark'
-                  ? 'border-amber-300/30 bg-amber-300/10 text-amber-100'
-                  : 'border-amber-200 bg-amber-50 text-amber-900'
-              }`}
-            >
-              {DEPLOY_WARNING}
-            </div>
+          {activeRepo.repo.description ? (
+            <p className={`mt-1 truncate text-sm ${mutedText}`}>{activeRepo.repo.description}</p>
           ) : null}
         </div>
-        <div
-          className={`shrink-0 rounded-2xl border px-5 py-4 text-center ${
-            theme === 'dark' ? 'border-violet-400/20 bg-violet-500/[0.07]' : 'border-slate-200 bg-slate-50'
-          }`}
-        >
-          <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${mutedText}`}>
-            Score
-          </p>
-          <p
-            className={`mt-1 text-5xl font-semibold tracking-[-0.02em] ${
-              theme === 'dark' ? 'text-violet-200' : 'text-slate-900'
-            }`}
-          >
-            {score.total}
-          </p>
-          <p className={`text-xs ${mutedText}`}>/ 100</p>
-        </div>
+        {!score.checklist.hasHomepage ? (
+          <div className={`shrink-0 rounded-lg border px-2.5 py-1 text-xs ${
+            theme === 'dark'
+              ? 'border-amber-300/30 bg-amber-300/10 text-amber-200'
+              : 'border-amber-200 bg-amber-50 text-amber-800'
+          }`}>
+            No deploy link
+          </div>
+        ) : null}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
-        <div className="space-y-4">
+      <div className="grid gap-3 xl:grid-cols-[260px_1fr]">
+        <div className="space-y-3">
           <Checklist checklist={score.checklist} theme={theme} />
           <label className="block">
             <span className={`text-sm font-medium ${mutedText}`}>Deploy URL</span>
@@ -474,94 +465,87 @@ function App() {
       ) : null}
 
       {generated && writeSelection ? (
-        <div className="rounded-2xl border border-white/10 p-4">
-          <p className={`mb-3 text-xs font-semibold uppercase tracking-[0.14em] ${mutedText}`}>
-            Select items to write to GitHub
-          </p>
-          <div className="space-y-2">
-            <SelectionCheckbox
-              id="sel-readme"
-              label="README rewrite"
-              checked={writeSelection.readme}
-              theme={theme}
-              onChange={() => toggleWriteSelection('readme')}
-            />
-            <SelectionCheckbox
-              id="sel-description"
-              label="Description"
-              checked={writeSelection.description}
-              theme={theme}
-              onChange={() => toggleWriteSelection('description')}
-            />
-            {writeSelection.description ? (
-              <input
-                value={editedDescription}
-                onChange={(e) => setEditedDescription(e.target.value)}
-                className={`ml-7 h-8 w-[calc(100%-1.75rem)] rounded-lg border px-3 text-sm outline-none transition duration-150 ${
-                  theme === 'dark'
-                    ? 'border-white/10 bg-black/20 text-slate-100 focus:border-violet-400/60'
-                    : 'border-slate-300 bg-white text-slate-950 focus:border-slate-950'
+        <div className={`rounded-xl border p-3 ${theme === 'dark' ? 'border-white/10' : 'border-slate-200'}`}>
+          {/* Compact checkbox row + action buttons */}
+          <div className="flex flex-wrap items-center gap-x-1 gap-y-2">
+            <span className={`mr-2 shrink-0 text-xs font-semibold uppercase tracking-[0.12em] ${mutedText}`}>
+              Write:
+            </span>
+            {(
+              [
+                { id: 'sel-readme', label: 'README', field: 'readme' },
+                { id: 'sel-description', label: 'Description', field: 'description' },
+                { id: 'sel-topics', label: 'Topics', field: 'topics' },
+                { id: 'sel-homepage', label: 'Homepage', field: 'homepage' },
+              ] as const
+            ).map(({ id, label, field }) => (
+              <label
+                key={id}
+                htmlFor={id}
+                className={`inline-flex cursor-pointer select-none items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                  writeSelection[field]
+                    ? theme === 'dark'
+                      ? 'border-violet-400/50 bg-violet-500/20 text-violet-200'
+                      : 'border-slate-900 bg-slate-900 text-white'
+                    : theme === 'dark'
+                      ? 'border-white/10 bg-white/[0.04] text-slate-400 hover:border-white/20'
+                      : 'border-slate-300 bg-white text-slate-500 hover:border-slate-400'
                 }`}
-              />
-            ) : null}
-            <SelectionCheckbox
-              id="sel-topics"
-              label="Topics"
-              checked={writeSelection.topics}
-              theme={theme}
-              onChange={() => toggleWriteSelection('topics')}
-            />
-            {writeSelection.topics ? (
-              <input
-                value={editedTopics}
-                onChange={(e) => setEditedTopics(e.target.value)}
-                placeholder="comma-separated topics"
-                className={`ml-7 h-8 w-[calc(100%-1.75rem)] rounded-lg border px-3 text-sm outline-none transition duration-150 ${
-                  theme === 'dark'
-                    ? 'border-white/10 bg-black/20 text-slate-100 placeholder:text-slate-500 focus:border-violet-400/60'
-                    : 'border-slate-300 bg-white text-slate-950 placeholder:text-slate-400 focus:border-slate-950'
-                }`}
-              />
-            ) : null}
-            <SelectionCheckbox
-              id="sel-homepage"
-              label="Deploy suggestion / homepage"
-              checked={writeSelection.homepage}
-              theme={theme}
-              onChange={() => toggleWriteSelection('homepage')}
-            />
+              >
+                <input
+                  id={id}
+                  type="checkbox"
+                  checked={writeSelection[field]}
+                  onChange={() => toggleWriteSelection(field)}
+                  className="sr-only"
+                />
+                {writeSelection[field] ? '✓ ' : ''}{label}
+              </label>
+            ))}
+            <div className="ml-auto flex items-center gap-1.5">
+              <button type="button" onClick={() => void handleCopyReadme()} className={buttonClass(theme, 'secondary')}>
+                Copy
+              </button>
+              <button type="button" onClick={handleDownloadReadme} className={buttonClass(theme, 'secondary')}>
+                Download
+              </button>
+              <button
+                type="button"
+                onClick={confirmApplySelected}
+                disabled={!writeSelection.readme && !writeSelection.description && !writeSelection.topics && !writeSelection.homepage}
+                className={buttonClass(theme, 'primary')}
+              >
+                Apply
+              </button>
+            </div>
           </div>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void handleCopyReadme()}
-              className={buttonClass(theme, 'secondary')}
-            >
-              Copy README
-            </button>
-            <button
-              type="button"
-              onClick={handleDownloadReadme}
-              className={buttonClass(theme, 'secondary')}
-            >
-              Download .md
-            </button>
-            <button
-              type="button"
-              onClick={confirmApplySelected}
-              disabled={
-                !writeSelection.readme &&
-                !writeSelection.description &&
-                !writeSelection.topics &&
-                !writeSelection.homepage
-              }
-              className={buttonClass(theme, 'primary')}
-            >
-              Apply Selected
-            </button>
-          </div>
+          {/* Inline edit fields — only appear when the pill is checked */}
+          {writeSelection.description ? (
+            <input
+              value={editedDescription}
+              onChange={(e) => setEditedDescription(e.target.value)}
+              placeholder="Description"
+              className={`mt-2 h-8 w-full rounded-lg border px-3 text-sm outline-none transition duration-150 ${
+                theme === 'dark'
+                  ? 'border-white/10 bg-black/20 text-slate-100 focus:border-violet-400/60'
+                  : 'border-slate-300 bg-white text-slate-950 focus:border-slate-950'
+              }`}
+            />
+          ) : null}
+          {writeSelection.topics ? (
+            <input
+              value={editedTopics}
+              onChange={(e) => setEditedTopics(e.target.value)}
+              placeholder="Topics (comma-separated)"
+              className={`mt-2 h-8 w-full rounded-lg border px-3 text-sm outline-none transition duration-150 ${
+                theme === 'dark'
+                  ? 'border-white/10 bg-black/20 text-slate-100 placeholder:text-slate-500 focus:border-violet-400/60'
+                  : 'border-slate-300 bg-white text-slate-950 placeholder:text-slate-400 focus:border-slate-950'
+              }`}
+            />
+          ) : null}
           {copyMessage ? (
-            <p className="mt-3 text-sm text-emerald-400">{copyMessage}</p>
+            <p className="mt-2 text-xs text-emerald-400">{copyMessage}</p>
           ) : null}
         </div>
       ) : null}
@@ -646,11 +630,13 @@ function App() {
             )}
           </div>
 
-          {/* Desktop: repo list above, detail below */}
+          {/* Desktop: repo list above, detail below — list hides while generating/generated */}
           <div className="hidden md:flex md:flex-col md:gap-4">
-            <aside className={`rounded-2xl border p-4 ${panelClass}`}>
-              {repoListContent}
-            </aside>
+            {!isGenerating && !generated ? (
+              <aside className={`rounded-2xl border p-4 ${panelClass}`}>
+                {repoListContent}
+              </aside>
+            ) : null}
             <section className={`rounded-2xl border p-4 md:p-5 ${panelClass}`}>
               {detailContent}
             </section>
@@ -1252,37 +1238,6 @@ function inputClass(theme: Theme) {
   }`
 }
 
-function SelectionCheckbox({
-  id,
-  label,
-  checked,
-  theme,
-  onChange,
-}: {
-  id: string
-  label: string
-  checked: boolean
-  theme: Theme
-  onChange: () => void
-}) {
-  return (
-    <label
-      htmlFor={id}
-      className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 transition ${
-        theme === 'dark' ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'
-      }`}
-    >
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        className="h-4 w-4 cursor-pointer accent-violet-400"
-      />
-      <span className="text-sm">{label}</span>
-    </label>
-  )
-}
 
 function toToneString(tone: string) {
   switch (tone) {
