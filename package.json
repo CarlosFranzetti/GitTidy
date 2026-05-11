@@ -12,6 +12,7 @@
     "vercel:pull": "vercel pull --yes --environment=development"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },
@@ -29,7 +30,7 @@
     "tailwindcss": "^4.2.4",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
-    "vercel": "^53.2.0",
+    "vercel": "^53.4.0",
     "vite": "^8.0.10"
   }
 }
