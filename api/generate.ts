@@ -22,6 +22,8 @@ type GenerateBody = {
     tone: string
     extraNotes: string
   }
+  refinementInput?: string
+  currentReadmeMd?: string
 }
 
 export default async function handler(
@@ -67,6 +69,7 @@ export default async function handler(
 }
 
 async function createOpenRouterCompletion(apiKey: string, body: GenerateBody) {
+  const isRefinement = Boolean(body.refinementInput && body.currentReadmeMd)
   const systemPrompt = [
     'You are a JSON API. You MUST respond with ONLY a raw JSON object.',
     'Do NOT include markdown. Do NOT use backticks. Do NOT add any explanation or commentary.',
@@ -74,25 +77,36 @@ async function createOpenRouterCompletion(apiKey: string, body: GenerateBody) {
     'The response must start with { and end with } and contain nothing else.',
     'Use this exact shape:',
     '{"readme_md":"A polished README in markdown with title, tagline, features, tech stack, setup, demo link section, screenshots placeholder, and future improvements.","description":"Short GitHub repo description under 160 characters.","topics":["5","to","8","github","topics"],"deploy_suggestion":"Short suggestion if no homepage exists."}',
-    'Tone: Fun, clear, student-builder friendly.',
+    isRefinement
+      ? 'Task: Refine and update the provided README based on the user instructions. Preserve the overall structure but apply the requested changes.'
+      : `Tone: ${body.context.tone || 'Fun, clear, student-builder friendly'}.`,
     'No fake claims. Do not invent features.',
     'Topics must be 5 to 8 lowercase GitHub topics.',
     'Return ONLY valid JSON. Do not include markdown. Do not include backticks. Do not include explanations.',
   ].join(' ')
   const primaryRepo = body.repos[0]
-  const userPrompt = [
-    `Repo name: ${primaryRepo?.fullName || primaryRepo?.name || 'Unknown'}`,
-    `Current description: ${primaryRepo?.description || 'None'}`,
-    `Language: ${primaryRepo?.language || 'Unknown'}`,
-    `Homepage URL: ${primaryRepo?.homepage || 'None'}`,
-    `Topics: ${(primaryRepo?.topics ?? []).join(', ') || 'None'}`,
-    `Project goal: ${body.context.projectGoal || 'Infer from the repository.'}`,
-    `Audience: ${body.context.audience || 'students, recruiters, collaborators, and indie builders'}`,
-    `Deploy target: ${body.context.deployTarget || 'Infer if possible.'}`,
-    `Extra notes: ${body.context.extraNotes || 'None'}`,
-    'Existing README:',
-    primaryRepo?.existingReadme || primaryRepo?.readmeExcerpt || 'No README provided.',
-  ].join('\n')
+  const userPrompt = isRefinement
+    ? [
+        `Repo name: ${primaryRepo?.fullName || primaryRepo?.name || 'Unknown'}`,
+        `Refinement instructions: ${body.refinementInput}`,
+        `Extra context: ${body.context.extraNotes || 'None'}`,
+        'Current README to refine:',
+        body.currentReadmeMd ?? '',
+      ].join('\n')
+    : [
+        `Repo name: ${primaryRepo?.fullName || primaryRepo?.name || 'Unknown'}`,
+        `Current description: ${primaryRepo?.description || 'None'}`,
+        `Language: ${primaryRepo?.language || 'Unknown'}`,
+        `Homepage URL: ${primaryRepo?.homepage || 'None'}`,
+        `Topics: ${(primaryRepo?.topics ?? []).join(', ') || 'None'}`,
+        `Project goal: ${body.context.projectGoal || 'Infer from the repository.'}`,
+        `Audience: ${body.context.audience || 'students, recruiters, collaborators, and indie builders'}`,
+        `Deploy target: ${body.context.deployTarget || 'Infer if possible.'}`,
+        `Tone: ${body.context.tone || 'fun, clear, student-builder friendly'}`,
+        `Extra notes: ${body.context.extraNotes || 'None'}`,
+        'Existing README or code analysis:',
+        primaryRepo?.existingReadme || primaryRepo?.readmeExcerpt || 'No README provided. Infer from the repo name, language, and metadata.',
+      ].join('\n')
 
   const openRouterResponse = await callOpenRouter(apiKey, {
     model: readEnvValue('OPENROUTER_MODEL') ?? 'baidu/cobuddy:free',

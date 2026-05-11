@@ -31,6 +31,8 @@ export type InferredContext = {
 export type GenerateSuggestionsRequest = {
   repos: RepoGenerationInput[]
   context: InferredContext
+  refinementInput?: string
+  currentReadmeMd?: string
 }
 
 export type GenerateSuggestionsResponse = {

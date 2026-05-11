@@ -3,6 +3,7 @@ import { generateSuggestions } from './features/ai/client'
 import type { AiSuggestions, RepoGenerationInput } from './features/ai/types'
 import {
   fetchRepositories,
+  fetchRepositoryContextText,
   fetchRepositoryDetails,
   fetchRepositoryReadme,
   fetchViewer,
@@ -79,6 +80,12 @@ function App() {
   })
   const [copyMessage, setCopyMessage] = useState('')
   const [debugRawAi, setDebugRawAi] = useState<string | null>(null)
+  const [appView, setAppView] = useState<'list' | 'detail'>('list')
+  const [retryTone, setRetryTone] = useState('fun')
+  const [retryNotes, setRetryNotes] = useState('')
+  const [refinementInput, setRefinementInput] = useState('')
+  const [isRefining, setIsRefining] = useState(false)
+  const [codeContext, setCodeContext] = useState('')
 
   const score = useMemo(
     () => calculateScore(activeRepo?.repo, activeRepo?.readme ?? ''),
@@ -89,12 +96,12 @@ function App() {
 
   const appClass =
     theme === 'dark'
-      ? 'min-h-screen bg-[#070b12] text-slate-100'
-      : 'min-h-screen bg-slate-100 text-slate-950'
+      ? 'min-h-dvh bg-[#070b12] text-slate-100'
+      : 'min-h-dvh bg-slate-50 text-slate-950'
   const panelClass =
     theme === 'dark'
-      ? 'border-white/10 bg-white/[0.06] shadow-2xl shadow-black/30'
-      : 'border-slate-200 bg-white shadow-xl shadow-slate-200/70'
+      ? 'border-white/[0.08] bg-white/[0.06] shadow-2xl shadow-violet-950/50'
+      : 'border-slate-200 bg-white shadow-xl shadow-slate-200/60'
   const mutedText = theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
 
   useEffect(() => {
@@ -125,7 +132,7 @@ function App() {
         <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-5 md:flex-row md:items-center md:justify-between">
           <div>
             <p className={`text-sm font-medium ${mutedText}`}>GitTidy</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight md:text-4xl">
+            <h1 className="mt-1 text-3xl font-semibold tracking-[-0.02em] md:text-4xl">
               Polish the repo before anyone clicks it.
             </h1>
             <p className={`mt-2 max-w-2xl text-sm leading-6 ${mutedText}`}>
@@ -168,7 +175,8 @@ function App() {
           <DebugPanel rawContent={debugRawAi} theme={theme} onClose={() => setDebugRawAi(null)} />
         ) : null}
 
-        <div className="grid flex-1 gap-5 lg:grid-cols-[360px_1fr]">
+        <div className="flex-1">
+          {appView === 'list' ? (
           <aside className={`rounded-2xl border p-4 ${panelClass}`}>
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -207,7 +215,7 @@ function App() {
                     className={`w-full rounded-xl border p-3 text-left transition ${
                       activeRepo?.repo.id === repo.id
                         ? theme === 'dark'
-                          ? 'border-cyan-300/60 bg-cyan-300/10'
+                          ? 'border-violet-400/60 bg-violet-400/[0.08]'
                           : 'border-slate-950 bg-slate-950 text-white'
                         : theme === 'dark'
                           ? 'border-white/10 bg-white/[0.04] hover:border-white/25'
@@ -229,12 +237,18 @@ function App() {
               </div>
             )}
           </aside>
-
+          ) : (
           <section className={`rounded-2xl border p-4 md:p-5 ${panelClass}`}>
             {!activeRepo ? (
-              <EmptyState theme={theme} />
+              <div className="flex flex-col items-start gap-3">
+                <button type="button" onClick={goBack} className={buttonClass(theme, 'ghost', '-ml-3')}>← Back to repos</button>
+                <EmptyState theme={theme} />
+              </div>
             ) : (
               <div className="space-y-5">
+                <div className="flex items-center pb-1">
+                  <button type="button" onClick={goBack} className={buttonClass(theme, 'ghost', '-ml-3')}>← Repos</button>
+                </div>
                 <div className="flex flex-col gap-4 border-b border-white/10 pb-5 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0">
                     <p className={`text-sm ${mutedText}`}>Selected repo</p>
@@ -256,12 +270,16 @@ function App() {
                       </div>
                     ) : null}
                   </div>
-                  <div className="shrink-0 rounded-2xl border border-white/10 px-5 py-4 text-center">
-                    <p className={`text-xs font-medium uppercase tracking-[0.18em] ${mutedText}`}>
-                      GitTidy score
+                  <div className={`shrink-0 rounded-2xl border px-5 py-4 text-center ${
+                    theme === 'dark' ? 'border-violet-400/20 bg-violet-500/[0.07]' : 'border-slate-200 bg-slate-50'
+                  }`}>
+                    <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${mutedText}`}>
+                      Score
                     </p>
-                    <p className="mt-1 text-5xl font-semibold">{score.total}</p>
-                    <p className={`text-sm ${mutedText}`}>/ 100</p>
+                    <p className={`mt-1 text-5xl font-semibold tracking-[-0.02em] ${
+                      theme === 'dark' ? 'text-violet-200' : 'text-slate-900'
+                    }`}>{score.total}</p>
+                    <p className={`text-xs ${mutedText}`}>/ 100</p>
                   </div>
                 </div>
 
@@ -277,23 +295,68 @@ function App() {
                         className={inputClass(theme)}
                       />
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => void handleGenerate()}
-                      disabled={isGenerating || activeRepo.isLoading}
-                      className={buttonClass(theme, 'primary', 'w-full')}
-                    >
-                      {isGenerating ? 'Generating...' : 'Generate Beautified README'}
-                    </button>
+                    {!generated ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleGenerate()}
+                        disabled={isGenerating || activeRepo.isLoading}
+                        className={buttonClass(theme, 'primary', 'w-full')}
+                      >
+                        {isGenerating ? 'Generating...' : 'Generate Beautified README'}
+                      </button>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${mutedText}`}>Try again with different tone</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(['fun', 'professional', 'minimal', 'technical'] as const).map((tone) => (
+                            <button
+                              key={tone}
+                              type="button"
+                              onClick={() => setRetryTone(tone)}
+                              className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition duration-150 ${
+                                retryTone === tone
+                                  ? theme === 'dark'
+                                    ? 'bg-violet-500 text-white'
+                                    : 'bg-slate-950 text-white'
+                                  : theme === 'dark'
+                                    ? 'border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'
+                                    : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                              }`}
+                            >
+                              {tone}
+                            </button>
+                          ))}
+                        </div>
+                        <textarea
+                          value={retryNotes}
+                          onChange={(e) => setRetryNotes(e.target.value)}
+                          placeholder="Extra context, constraints, or instructions..."
+                          rows={3}
+                          className={`w-full resize-none rounded-lg border px-3 py-2 text-sm outline-none transition duration-150 ${
+                            theme === 'dark'
+                              ? 'border-white/10 bg-black/20 text-slate-100 placeholder:text-slate-500 focus:border-violet-400/60'
+                              : 'border-slate-300 bg-white text-slate-950 placeholder:text-slate-400 focus:border-slate-950'
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void handleGenerate()}
+                          disabled={isGenerating || activeRepo.isLoading}
+                          className={buttonClass(theme, 'primary', 'w-full')}
+                        >
+                          {isGenerating ? 'Generating...' : 'Regenerate'}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid gap-4 xl:grid-cols-2">
                     <ReadmePanel
-                      title="Existing README"
+                      title={activeRepo.readme ? 'Existing README' : codeContext ? 'Code analysis' : 'Existing README'}
                       value={
                         activeRepo.isLoading
-                          ? 'Fetching README from GitHub...'
-                          : activeRepo.readme || 'No README detected.'
+                          ? 'Fetching README and analyzing code...'
+                          : activeRepo.readme || codeContext || 'No README or code analysis available.'
                       }
                       theme={theme}
                     />
@@ -304,6 +367,35 @@ function App() {
                     />
                   </div>
                 </div>
+
+                {generated ? (
+                  <div className={`rounded-2xl border p-4 ${theme === 'dark' ? 'border-white/[0.08]' : 'border-slate-200'}`}>
+                    <p className={`mb-2 text-xs font-semibold uppercase tracking-[0.14em] ${mutedText}`}>
+                      Refine the generated README
+                    </p>
+                    <textarea
+                      value={refinementInput}
+                      onChange={(e) => setRefinementInput(e.target.value)}
+                      placeholder="e.g. Add a contributing section, make it shorter, add API docs..."
+                      rows={3}
+                      className={`w-full resize-none rounded-lg border px-3 py-2 text-sm outline-none transition duration-150 ${
+                        theme === 'dark'
+                          ? 'border-white/10 bg-black/20 text-slate-100 placeholder:text-slate-500 focus:border-violet-400/60'
+                          : 'border-slate-300 bg-white text-slate-950 placeholder:text-slate-400 focus:border-slate-950'
+                      }`}
+                    />
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => void handleRefine()}
+                        disabled={isRefining || !refinementInput.trim()}
+                        className={buttonClass(theme, 'secondary')}
+                      >
+                        {isRefining ? 'Refining...' : 'Refine README'}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
 
                 {generated && writeSelection ? (
                   <div className="rounded-2xl border border-white/10 p-4">
@@ -370,6 +462,7 @@ function App() {
               </div>
             )}
           </section>
+          )}
         </div>
       </div>
 
@@ -412,6 +505,10 @@ function App() {
     setGenerated(null)
     setWriteSelection(null)
     setHomepageDraft(repo.homepage)
+    setRefinementInput('')
+    setRetryNotes('')
+    setCodeContext('')
+    setAppView('detail')
     setActiveRepo({ repo, readme: '', isLoading: true })
 
     const { owner, name } = splitFullName(repo.fullName)
@@ -423,6 +520,12 @@ function App() {
       ])
       const decodedReadme = readme?.decodedContent ?? ''
       const normalized = normalizeGitHubRepo(details, countWords(decodedReadme))
+
+      if (!decodedReadme) {
+        fetchRepositoryContextText(owner, name, details.default_branch, githubToken)
+          .then((ctx) => setCodeContext(ctx))
+          .catch(() => undefined)
+      }
 
       setHomepageDraft(normalized.homepage)
       setActiveRepo({
@@ -455,13 +558,15 @@ function App() {
 
     try {
       const response = await generateSuggestions({
-        repos: [toGenerationInput(activeRepo.repo, activeRepo.readme)],
+        repos: [toGenerationInput(activeRepo.repo, activeRepo.readme || codeContext)],
         context: {
           projectGoal: 'Make this repository clear, clickable, and portfolio-ready.',
           audience: 'students, recruiters, collaborators, and indie builders',
           deployTarget: homepageDraft || activeRepo.repo.homepage || 'Vercel if this is a web app',
-          tone: 'fun, clear, student-builder friendly',
-          extraNotes: 'Do not invent features. Use only the repository metadata and existing README.',
+          tone: toToneString(retryTone),
+          extraNotes: retryNotes
+            ? `User notes: ${retryNotes}`
+            : 'Do not invent features. Use only the repository metadata and existing README.',
         },
       })
 
@@ -584,6 +689,51 @@ function App() {
     }
   }
 
+  function goBack() {
+    setAppView('list')
+    setActiveRepo(null)
+    setGenerated(null)
+    setWriteSelection(null)
+    setRefinementInput('')
+    setRetryNotes('')
+    setRetryTone('fun')
+    setCodeContext('')
+    setMessage('')
+  }
+
+  async function handleRefine() {
+    if (!activeRepo || !generated || !refinementInput.trim()) return
+
+    setIsRefining(true)
+    setMessage('')
+
+    try {
+      const response = await generateSuggestions({
+        repos: [toGenerationInput(activeRepo.repo, activeRepo.readme || codeContext)],
+        context: {
+          projectGoal: 'Refine the existing generated README based on user instructions.',
+          audience: 'students, recruiters, collaborators, and indie builders',
+          deployTarget: homepageDraft || activeRepo.repo.homepage || 'Vercel if this is a web app',
+          tone: toToneString(retryTone),
+          extraNotes: retryNotes ? `Additional context: ${retryNotes}` : 'None',
+        },
+        refinementInput: refinementInput.trim(),
+        currentReadmeMd: generated.readmeMd,
+      })
+
+      const preview = response.previews[0] ?? null
+      if (preview) {
+        setGenerated(preview)
+        setRefinementInput('')
+        setWriteSelection({ readme: true, description: true, topics: true, homepage: true })
+      }
+    } catch (error: unknown) {
+      setMessage(resolveError(error, 'Refinement failed.'))
+    } finally {
+      setIsRefining(false)
+    }
+  }
+
   function disconnect() {
     window.localStorage.removeItem(STORAGE_KEY)
     setGithubToken('')
@@ -591,6 +741,8 @@ function App() {
     setRepos([])
     setActiveRepo(null)
     setGenerated(null)
+    setAppView('list')
+    setCodeContext('')
   }
 }
 
@@ -599,8 +751,8 @@ function EmptyState({ theme }: { theme: Theme }) {
     <div className="grid min-h-[520px] place-items-center text-center">
       <div className="max-w-md">
         <div
-          className={`mx-auto grid h-14 w-14 place-items-center rounded-2xl text-2xl ${
-            theme === 'dark' ? 'bg-cyan-300/10 text-cyan-200' : 'bg-slate-950 text-white'
+          className={`mx-auto grid h-14 w-14 place-items-center rounded-2xl text-2xl font-semibold ${
+            theme === 'dark' ? 'bg-violet-500/20 text-violet-300' : 'bg-slate-950 text-white'
           }`}
         >
           GT
@@ -633,10 +785,12 @@ function Checklist({ checklist, theme }: { checklist: ScoreChecklist; theme: The
             <span
               className={`grid h-5 w-5 place-items-center rounded-full text-xs ${
                 checked
-                  ? 'bg-emerald-400 text-emerald-950'
+                  ? theme === 'dark'
+                    ? 'bg-emerald-400/20 text-emerald-400'
+                    : 'bg-emerald-500 text-white'
                   : theme === 'dark'
-                    ? 'bg-white/10 text-slate-400'
-                    : 'bg-slate-200 text-slate-500'
+                    ? 'bg-white/10 text-slate-500'
+                    : 'bg-slate-200 text-slate-400'
               }`}
             >
               {checked ? '✓' : '•'}
@@ -718,7 +872,7 @@ function ConfirmationModal({
   onConfirm: () => void
 }) {
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 px-4 backdrop-blur-sm">
       <div
         className={`w-full max-w-md rounded-2xl border p-5 shadow-2xl ${
           theme === 'dark'
@@ -791,30 +945,30 @@ function toGenerationInput(repo: RepoRecord, readme: string): RepoGenerationInpu
 
 function buttonClass(theme: Theme, variant: 'primary' | 'secondary' | 'ghost', extra = '') {
   const base =
-    'inline-flex h-10 items-center justify-center rounded-lg px-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50'
+    'inline-flex h-10 items-center justify-center rounded-lg px-3 text-sm font-medium transition duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2'
   const styles = {
     primary:
       theme === 'dark'
-        ? 'bg-cyan-300 text-slate-950 hover:bg-cyan-200'
-        : 'bg-slate-950 text-white hover:bg-slate-800',
+        ? 'bg-violet-500 text-white hover:bg-violet-400 focus-visible:ring-violet-400/50'
+        : 'bg-slate-950 text-white hover:bg-slate-800 focus-visible:ring-slate-400/50',
     secondary:
       theme === 'dark'
-        ? 'border border-white/10 bg-white/[0.06] text-slate-100 hover:bg-white/[0.1]'
-        : 'border border-slate-300 bg-white text-slate-900 hover:bg-slate-50',
+        ? 'border border-white/10 bg-white/[0.06] text-slate-100 hover:bg-white/[0.1] focus-visible:ring-white/20'
+        : 'border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 focus-visible:ring-slate-300',
     ghost:
       theme === 'dark'
-        ? 'text-slate-300 hover:bg-white/[0.08]'
-        : 'text-slate-700 hover:bg-slate-100',
+        ? 'text-slate-300 hover:bg-white/[0.08] focus-visible:ring-white/20'
+        : 'text-slate-700 hover:bg-slate-100 focus-visible:ring-slate-300',
   }
 
   return `${base} ${styles[variant]} ${extra}`
 }
 
 function inputClass(theme: Theme) {
-  return `mt-1 h-10 w-full rounded-lg border px-3 text-sm outline-none transition ${
+  return `mt-1 h-10 w-full rounded-lg border px-3 text-sm outline-none transition duration-150 focus-visible:ring-2 ${
     theme === 'dark'
-      ? 'border-white/10 bg-black/20 text-slate-100 placeholder:text-slate-500 focus:border-cyan-300/70'
-      : 'border-slate-300 bg-white text-slate-950 placeholder:text-slate-400 focus:border-slate-950'
+      ? 'border-white/10 bg-black/20 text-slate-100 placeholder:text-slate-500 focus:border-violet-400/60 focus-visible:ring-violet-400/20'
+      : 'border-slate-300 bg-white text-slate-950 placeholder:text-slate-400 focus:border-slate-950 focus-visible:ring-slate-300'
   }`
 }
 
@@ -843,11 +997,20 @@ function SelectionCheckbox({
         type="checkbox"
         checked={checked}
         onChange={onChange}
-        className="h-4 w-4 cursor-pointer accent-cyan-300"
+        className="h-4 w-4 cursor-pointer accent-violet-400"
       />
       <span className="text-sm">{label}</span>
     </label>
   )
+}
+
+function toToneString(tone: string) {
+  switch (tone) {
+    case 'professional': return 'professional, polished, concise'
+    case 'minimal': return 'minimal, clean, simple language'
+    case 'technical': return 'technical, precise, developer-focused'
+    default: return 'fun, clear, student-builder friendly'
+  }
 }
 
 function resolveError(error: unknown, fallback: string) {

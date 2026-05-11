@@ -1,50 +1,39 @@
-# GitTidy
+<p align="center">
+  <img src="GitTidyLogo.png" alt="GitTidy logo" width="96" />
+</p>
 
-GitTidy turns messy GitHub repos into portfolio-ready projects.
+<h1 align="center">GitTidy</h1>
 
-It connects to GitHub, lets you select one or more repositories, asks AI to infer missing project context from repo metadata and markdown files, then generates a clean preview of README, description, topic, and deploy-link improvements before anything is committed.
+<p align="center">Polish your GitHub repos before anyone clicks them.</p>
 
-Live app: https://git-tidy.vercel.app
+<p align="center">
+  <a href="https://git-tidy.vercel.app">Live app</a>
+</p>
 
-## Why It Exists
+---
 
-Students and indie developers ship real work, then bury it behind thin READMEs, missing descriptions, no topics, and no deploy links. GitTidy is the small cleanup pass before you send someone your GitHub profile.
+GitTidy connects to GitHub via OAuth, analyzes your repository quality (README, description, topics, deploy link), and uses AI to generate improved versions of those elements. You preview every suggestion and selectively apply only what you want — nothing is written automatically.
 
-## What It Does
+## Features
 
-- Connects to GitHub with OAuth.
-- Lists repositories and lets you select one or more.
-- Samples repo metadata, README markdown, docs markdown, and lightweight config files.
-- Uses OpenRouter with Baidu Qianfan CoBuddy free model.
-- Infers useful context so you do not have to fill out every field manually.
-- Generates previewable improvements for each selected repo.
-- Keeps commit/push disabled until a final diff and write-scope GitHub flow are added.
+- Connect GitHub with OAuth — no tokens stored server-side
+- Repository quality scoring (README detail, description, topics, deploy link)
+- AI-generated README rewrite, description, topics, and deploy link suggestion
+- Tone selector: fun, professional, minimal, or technical
+- Refine the generated README with targeted instructions
+- Selective write-back: choose exactly which items to apply
+- Code analysis fallback when a repo has no README — AI infers from file structure
+- Confirmation modal before any GitHub write
 
-## Current MVP Flow
+## Tech stack
 
-1. Connect GitHub.
-2. Select repos.
-3. Click `Infer from repos` to prefill context.
-4. Edit the context if needed.
-5. Generate previews.
-6. Copy or review the proposed changes.
+- React 19 + TypeScript
+- Tailwind CSS v4
+- Vite + Vercel serverless functions
+- GitHub API (OAuth + REST)
+- OpenRouter (Baidu Qianfan CoBuddy free model)
 
-No repo files are changed automatically yet.
-
-## Tech Stack
-
-- Vite
-- React
-- TypeScript
-- Tailwind CSS
-- Vercel serverless functions
-- GitHub API
-- OpenRouter API
-- Baidu Qianfan CoBuddy free model
-
-## Local Setup
-
-Install dependencies:
+## Local setup
 
 ```bash
 npm install
@@ -59,61 +48,41 @@ GITHUB_CLIENT_ID=your_github_oauth_client_id
 GITHUB_CLIENT_SECRET=your_github_oauth_client_secret
 ```
 
-Run the full local app:
+For GitHub OAuth, register an app with callback URL:
+
+```
+http://localhost:3000/api/github/oauth/callback
+```
+
+Run the full local stack (frontend + API):
 
 ```bash
 npm run dev:full
 ```
 
-Open:
+Frontend only (no API):
 
-```text
-http://localhost:3000/
-```
-
-Use `npm run dev` only when working on frontend-only UI. AI routes require `npm run dev:full`.
-
-For GitHub OAuth, create a GitHub OAuth app with this callback URL:
-
-```text
-http://localhost:3000/api/github/oauth/callback
+```bash
+npm run dev
 ```
 
 ## Scripts
 
-- `npm run dev`: Vite frontend only
-- `npm run dev:full`: Vite plus Vercel API routes
-- `npm run build`: type-check and build
-- `npm run lint`: lint
-- `npm run preview`: preview production build
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Vite frontend only (port 5173) |
+| `npm run dev:full` | Vite + Vercel API routes (port 3000) |
+| `npm run build` | Type-check and build |
+| `npm run lint` | ESLint |
 
-## Environment Variables
+## Environment variables
 
-`OPENROUTER_API_KEY` is used only inside serverless functions. Do not prefix it with `VITE_`.
-
-`OPENROUTER_MODEL` defaults to:
-
-```text
-baidu/cobuddy:free
-```
-
-`GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are required for GitHub OAuth.
-
-## Project Status
-
-GitTidy is an MVP. It can fetch repositories, infer context, and generate previews. The next major step is safe write support:
-
-- request write-scope GitHub auth
-- show final file diffs
-- commit generated changes to a branch
-- open a pull request
-
-## Validation
-
-```bash
-npm run build
-npm run lint
-```
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `OPENROUTER_API_KEY` | Yes | Server-only — do not prefix with `VITE_` |
+| `OPENROUTER_MODEL` | No | Defaults to `baidu/cobuddy:free` |
+| `GITHUB_CLIENT_ID` | Yes | GitHub OAuth app client ID |
+| `GITHUB_CLIENT_SECRET` | Yes | GitHub OAuth app secret |
 
 ## License
 
