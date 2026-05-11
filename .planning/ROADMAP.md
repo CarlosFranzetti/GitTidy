@@ -28,7 +28,7 @@
 **Plans**: 3 plans
 Plans:
 **Wave 1**
-- [ ] 01-01-PLAN.md — WriteSelection type and state foundation (App.tsx)
+- [x] 01-01-PLAN.md — WriteSelection type and state foundation (App.tsx)
 - [ ] 01-03-PLAN.md — Unified write handler and confirmation modal (App.tsx)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -41,7 +41,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Selective Write-Back | 0/3 | Not started | - |
+| 1. Selective Write-Back | 1/3 | In Progress|  |
 
 ---
 
