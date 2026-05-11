@@ -241,12 +241,12 @@ function App() {
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
                   title="Open on GitHub"
-                  className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition ${
+                  className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                     activeRepo?.repo.id === repo.id && theme === 'light'
-                      ? 'border-white/30 bg-white/20 text-white hover:bg-white/30'
+                      ? 'border-white/60 bg-white text-slate-900 hover:bg-slate-100'
                       : theme === 'dark'
-                        ? 'border-white/20 bg-white/[0.08] text-slate-200 hover:bg-white/[0.14] hover:border-white/30'
-                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-400'
+                        ? 'border-violet-300/40 bg-violet-100 text-violet-900 hover:bg-white'
+                        : 'border-slate-900 bg-slate-900 text-white hover:bg-slate-700'
                   }`}
                 >
                   ↗ GitHub
@@ -289,10 +289,10 @@ function App() {
               href={`https://github.com/${activeRepo.repo.fullName}`}
               target="_blank"
               rel="noopener noreferrer"
-              className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold transition ${
+              className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                 theme === 'dark'
-                  ? 'border-white/20 bg-white/[0.06] text-slate-200 hover:bg-white/[0.12] hover:border-white/30'
-                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-400'
+                  ? 'border-violet-300/40 bg-violet-100 text-violet-900 hover:bg-white'
+                  : 'border-slate-900 bg-slate-900 text-white hover:bg-slate-700'
               }`}
             >
               ↗ GitHub
