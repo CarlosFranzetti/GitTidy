@@ -7,8 +7,6 @@ import {
   fetchRepositoryReadme,
   fetchViewer,
   GitHubClientError,
-  updateRepositoryMetadata,
-  updateRepositoryReadme,
 } from './features/github/client'
 import { normalizeGitHubRepo } from './features/github/normalize'
 import { copyText } from './lib/clipboard'
@@ -43,6 +41,13 @@ type PendingAction = {
   run: () => Promise<void>
 }
 
+type WriteSelection = {
+  readme: boolean
+  description: boolean
+  topics: boolean
+  homepage: boolean
+}
+
 function App() {
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === 'undefined') return 'dark'
@@ -60,6 +65,7 @@ function App() {
   const [repos, setRepos] = useState<RepoRecord[]>([])
   const [activeRepo, setActiveRepo] = useState<ActiveRepo | null>(null)
   const [generated, setGenerated] = useState<AiSuggestions | null>(null)
+  const [writeSelection, setWriteSelection] = useState<WriteSelection | null>(null)
   const [homepageDraft, setHomepageDraft] = useState('')
   const [isLoadingRepos, setIsLoadingRepos] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -70,13 +76,13 @@ function App() {
     return new URLSearchParams(window.location.search).get('error') ?? ''
   })
   const [copyMessage, setCopyMessage] = useState('')
+  const [debugRawAi, setDebugRawAi] = useState<string | null>(null)
 
   const score = useMemo(
     () => calculateScore(activeRepo?.repo, activeRepo?.readme ?? ''),
     [activeRepo],
   )
 
-  const selectedOwnerRepo = activeRepo ? splitFullName(activeRepo.repo.fullName) : null
   const appClass =
     theme === 'dark'
       ? 'min-h-screen bg-[#070b12] text-slate-100'
@@ -152,6 +158,10 @@ function App() {
           >
             {message}
           </div>
+        ) : null}
+
+        {debugRawAi ? (
+          <DebugPanel rawContent={debugRawAi} theme={theme} onClose={() => setDebugRawAi(null)} />
         ) : null}
 
         <div className="grid flex-1 gap-5 lg:grid-cols-[360px_1fr]">
@@ -291,18 +301,42 @@ function App() {
                   </div>
                 </div>
 
-                {generated ? (
+                {generated && writeSelection ? (
                   <div className="rounded-2xl border border-white/10 p-4">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <PreviewMeta title="Description" value={generated.description} mutedText={mutedText} />
-                      <PreviewMeta title="Topics" value={generated.topics.join(', ')} mutedText={mutedText} />
-                      <PreviewMeta
-                        title="Deploy suggestion"
-                        value={generated.deploySuggestion || 'Homepage already exists.'}
-                        mutedText={mutedText}
+                    <p className={`mb-3 text-xs font-semibold uppercase tracking-[0.14em] ${mutedText}`}>
+                      Select items to write to GitHub
+                    </p>
+                    <div className="space-y-2">
+                      <SelectionCheckbox
+                        id="sel-readme"
+                        label="README rewrite"
+                        checked={writeSelection.readme}
+                        theme={theme}
+                        onChange={() => toggleWriteSelection('readme')}
+                      />
+                      <SelectionCheckbox
+                        id="sel-description"
+                        label="Description"
+                        checked={writeSelection.description}
+                        theme={theme}
+                        onChange={() => toggleWriteSelection('description')}
+                      />
+                      <SelectionCheckbox
+                        id="sel-topics"
+                        label="Topics"
+                        checked={writeSelection.topics}
+                        theme={theme}
+                        onChange={() => toggleWriteSelection('topics')}
+                      />
+                      <SelectionCheckbox
+                        id="sel-homepage"
+                        label="Deploy suggestion / homepage"
+                        checked={writeSelection.homepage}
+                        theme={theme}
+                        onChange={() => toggleWriteSelection('homepage')}
                       />
                     </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         onClick={() => void handleCopyReadme()}
@@ -312,17 +346,15 @@ function App() {
                       </button>
                       <button
                         type="button"
-                        onClick={confirmReadmeUpdate}
-                        className={buttonClass(theme, 'secondary')}
+                        disabled={
+                          !writeSelection.readme &&
+                          !writeSelection.description &&
+                          !writeSelection.topics &&
+                          !writeSelection.homepage
+                        }
+                        className={buttonClass(theme, 'primary')}
                       >
-                        Update README on GitHub
-                      </button>
-                      <button
-                        type="button"
-                        onClick={confirmMetadataUpdate}
-                        className={buttonClass(theme, 'secondary')}
-                      >
-                        Update repo description/topics/homepage
+                        Apply Selected
                       </button>
                     </div>
                     {copyMessage ? (
@@ -373,6 +405,7 @@ function App() {
 
     setMessage('')
     setGenerated(null)
+    setWriteSelection(null)
     setHomepageDraft(repo.homepage)
     setActiveRepo({ repo, readme: '', isLoading: true })
 
@@ -412,6 +445,8 @@ function App() {
     setIsGenerating(true)
     setMessage('')
     setGenerated(null)
+    setWriteSelection(null)
+    setDebugRawAi(null)
 
     try {
       const response = await generateSuggestions({
@@ -425,9 +460,27 @@ function App() {
         },
       })
 
-      setGenerated(response.previews[0] ?? null)
+      const preview = response.previews[0] ?? null
+      setGenerated(preview)
+      if (preview) {
+        setWriteSelection({ readme: true, description: true, topics: true, homepage: true })
+      } else {
+        setWriteSelection(null)
+      }
     } catch (error: unknown) {
-      setMessage(resolveError(error, 'AI generation failed.'))
+      const rawContent =
+        typeof error === 'object' &&
+        error !== null &&
+        'rawContent' in error &&
+        typeof (error as Record<string, unknown>).rawContent === 'string'
+          ? (error as { rawContent: string }).rawContent
+          : undefined
+      setMessage(
+        rawContent
+          ? 'GitTidy could not parse the AI response. Try again.'
+          : resolveError(error, 'AI generation failed.'),
+      )
+      if (rawContent) setDebugRawAi(rawContent)
     } finally {
       setIsGenerating(false)
     }
@@ -445,45 +498,10 @@ function App() {
     }
   }
 
-  function confirmReadmeUpdate() {
-    if (!activeRepo || !generated || !selectedOwnerRepo) return
-
-    setPendingAction({
-      title: 'Update README on GitHub?',
-      body: `This will write the generated README to ${activeRepo.repo.fullName}. It will not update description, topics, or homepage.`,
-      confirmLabel: 'Update README',
-      run: async () => {
-        await updateRepositoryReadme({
-          owner: selectedOwnerRepo.owner,
-          repo: selectedOwnerRepo.name,
-          token: githubToken,
-          content: generated.readmeMd,
-          sha: activeRepo.readmeSha,
-        })
-        await selectRepo(activeRepo.repo)
-      },
-    })
-  }
-
-  function confirmMetadataUpdate() {
-    if (!activeRepo || !generated || !selectedOwnerRepo) return
-
-    setPendingAction({
-      title: 'Update repo metadata on GitHub?',
-      body: `This will update the GitHub description, topics, and homepage field for ${activeRepo.repo.fullName}.`,
-      confirmLabel: 'Update metadata',
-      run: async () => {
-        await updateRepositoryMetadata({
-          owner: selectedOwnerRepo.owner,
-          repo: selectedOwnerRepo.name,
-          token: githubToken,
-          description: generated.description,
-          topics: generated.topics,
-          homepage: homepageDraft.trim(),
-        })
-        await selectRepo(activeRepo.repo)
-      },
-    })
+  function toggleWriteSelection(field: keyof WriteSelection) {
+    setWriteSelection((current) =>
+      current ? { ...current, [field]: !current[field] } : current,
+    )
   }
 
   async function runPendingAction() {
@@ -593,21 +611,32 @@ function ReadmePanel({
   )
 }
 
-function PreviewMeta({
-  title,
-  value,
-  mutedText,
+function DebugPanel({
+  rawContent,
+  theme,
+  onClose,
 }: {
-  title: string
-  value: string
-  mutedText: string
+  rawContent: string
+  theme: Theme
+  onClose: () => void
 }) {
   return (
-    <div>
-      <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${mutedText}`}>
-        {title}
-      </p>
-      <p className="mt-1 text-sm leading-6">{value}</p>
+    <div
+      className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+        theme === 'dark'
+          ? 'border-red-400/30 bg-red-400/10 text-red-100'
+          : 'border-red-200 bg-red-50 text-red-900'
+      }`}
+    >
+      <div className="mb-2 flex items-center justify-between font-semibold">
+        <span>Raw AI response (debug)</span>
+        <button type="button" onClick={onClose} className="opacity-60 hover:opacity-100">
+          Dismiss
+        </button>
+      </div>
+      <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 opacity-80">
+        {rawContent}
+      </pre>
     </div>
   )
 }
@@ -724,6 +753,38 @@ function inputClass(theme: Theme) {
       ? 'border-white/10 bg-black/20 text-slate-100 placeholder:text-slate-500 focus:border-cyan-300/70'
       : 'border-slate-300 bg-white text-slate-950 placeholder:text-slate-400 focus:border-slate-950'
   }`
+}
+
+function SelectionCheckbox({
+  id,
+  label,
+  checked,
+  theme,
+  onChange,
+}: {
+  id: string
+  label: string
+  checked: boolean
+  theme: Theme
+  onChange: () => void
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 transition ${
+        theme === 'dark' ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'
+      }`}
+    >
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="h-4 w-4 cursor-pointer accent-cyan-300"
+      />
+      <span className="text-sm">{label}</span>
+    </label>
+  )
 }
 
 function resolveError(error: unknown, fallback: string) {
