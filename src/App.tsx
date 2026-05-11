@@ -193,7 +193,7 @@ function App() {
           The app does not write anything automatically.
         </div>
       ) : (
-        <div className="overflow-y-auto max-h-[calc(100vh-260px)] space-y-2 pr-1">
+        <div className="overflow-y-auto max-h-72 space-y-2 pr-1">
           {displayedRepos.map((repo) => (
             <div
               key={repo.id}
@@ -646,8 +646,8 @@ function App() {
             )}
           </div>
 
-          {/* Desktop: persistent sidebar + main */}
-          <div className="hidden md:grid md:grid-cols-[300px_1fr] md:gap-4">
+          {/* Desktop: repo list above, detail below */}
+          <div className="hidden md:flex md:flex-col md:gap-4">
             <aside className={`rounded-2xl border p-4 ${panelClass}`}>
               {repoListContent}
             </aside>
