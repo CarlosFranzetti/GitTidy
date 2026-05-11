@@ -223,7 +223,7 @@ function App() {
                     <button
                       type="button"
                       onClick={() => void selectRepo(repo)}
-                      className="block w-full p-3 pr-16 text-left"
+                      className="block w-full p-3 pr-24 text-left"
                     >
                       <span className="block truncate text-sm font-semibold">{repo.fullName}</span>
                       <span
@@ -236,7 +236,7 @@ function App() {
                         {repo.language} · {repo.description || 'No description yet'}
                       </span>
                     </button>
-                    <div className="absolute right-2 top-2.5 flex items-center gap-1.5">
+                    <div className="absolute right-2 top-2 flex items-center gap-2">
                       <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
                         activeRepo?.repo.id === repo.id && theme === 'light'
                           ? 'bg-white/20 text-white'
@@ -251,14 +251,16 @@ function App() {
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        title={`Open on GitHub`}
-                        className={`rounded p-0.5 text-xs opacity-50 transition hover:opacity-100 ${
+                        title="Open on GitHub"
+                        className={`rounded-md px-2 py-1 text-xs font-medium transition hover:opacity-100 ${
                           activeRepo?.repo.id === repo.id && theme === 'light'
-                            ? 'text-white'
-                            : mutedText
+                            ? 'bg-white/20 text-white opacity-80'
+                            : theme === 'dark'
+                              ? 'bg-white/10 text-slate-300 opacity-80 hover:bg-white/20'
+                              : 'bg-slate-100 text-slate-600 opacity-90 hover:bg-slate-200'
                         }`}
                       >
-                        ↗
+                        ↗ GitHub
                       </a>
                     </div>
                   </div>
