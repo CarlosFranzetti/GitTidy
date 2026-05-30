@@ -31,7 +31,7 @@ GitTidy connects to GitHub via OAuth, analyzes your repository quality (README, 
 - Tailwind CSS v4
 - Vite + Vercel serverless functions
 - GitHub API (OAuth + REST)
-- OpenRouter (Baidu Qianfan CoBuddy free model)
+- OpenRouter (Random free models. Its free, you get what you get.)
 
 ## Local setup
 
