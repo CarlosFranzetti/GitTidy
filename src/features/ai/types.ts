@@ -4,6 +4,8 @@ export type AiSuggestions = {
   description: string
   topics: string[]
   deploySuggestion: string
+  /** Which model actually produced this, reported by the server. */
+  model?: string
 }
 
 export type RepoGenerationInput = {
@@ -15,12 +17,11 @@ export type RepoGenerationInput = {
   homepage: string
   topics: string[]
   readmeWordCount: number
-  readmeExcerpt: string
-  existingReadme?: string
+  existingReadme: string
   issues: string[]
 }
 
-export type InferredContext = {
+export type GenerationContext = {
   projectGoal: string
   audience: string
   deployTarget: string
@@ -28,21 +29,21 @@ export type InferredContext = {
   extraNotes: string
 }
 
+/**
+ * 'full' asks for a README plus metadata. 'metadata' skips README generation
+ * entirely so topics and description can be fixed on their own — far cheaper
+ * and far less likely to trip the free-model rate limits.
+ */
+export type GenerationMode = 'full' | 'metadata'
+
 export type GenerateSuggestionsRequest = {
   repos: RepoGenerationInput[]
-  context: InferredContext
+  context: GenerationContext
+  mode?: GenerationMode
   refinementInput?: string
   currentReadmeMd?: string
 }
 
 export type GenerateSuggestionsResponse = {
   previews: AiSuggestions[]
-}
-
-export type InferContextRequest = {
-  repos: RepoGenerationInput[]
-}
-
-export type InferContextResponse = {
-  context: InferredContext
 }
