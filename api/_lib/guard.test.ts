@@ -7,8 +7,8 @@ import {
   limits,
   readBearerToken,
   resolveGitHubIdentity,
-} from './guard'
-import { HttpError } from './http'
+} from './guard.js'
+import { HttpError } from './http.js'
 
 function request(overrides: Partial<VercelRequest> = {}): VercelRequest {
   return { headers: {}, query: {}, ...overrides } as VercelRequest

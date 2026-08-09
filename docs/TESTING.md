@@ -1,7 +1,7 @@
 # Testing
 
 ```bash
-npm test           # Vitest unit + component tests (154)
+npm test           # Vitest unit + component tests (157)
 npm run test:watch # Vitest in watch mode
 npm run test:e2e   # Playwright browser matrix (69 in Chromium alone)
 npm run test:all   # both
@@ -21,15 +21,27 @@ npm run typecheck  # app, api and test sources
 | `api/_lib/http.test.ts` | Model JSON parsing — clean, fenced, prose-wrapped, code-in-string, unparseable |
 | `api/_lib/oauth.test.ts` | Constant-time state comparison, cookie parsing incl. suffix-collision attempts |
 | `api/_lib/guard.test.ts` | Rate-limit window and per-identity isolation, byte-accurate body cap, origin checks, identity caching |
+| `api/esm-resolution.test.ts` | Every relative import in `api/` carries an explicit `.js` extension and resolves — replicates Node's ESM resolver, which Vitest's own resolution cannot catch |
 | `api/_lib/providers.test.ts` | Provider ordering, Gemini schema request shape, multi-part responses, safety blocks, timeout vs network failure, OpenRouter fallback |
 | `src/components/readme-editor.test.tsx` | Edit vs read-only mode, dirty tracking, save/cancel, preview of unsaved edits, scroll restoration |
 
-Two of these encode bugs found in review, so a regression fails loudly:
+Three of these encode bugs that actually shipped, so a regression fails loudly:
 
 - **Partial metadata writes** — the old code sent cached values for unselected
   fields, reverting other people's edits.
 - **Confirm dialog item list** — the old dialog joined items with `\n` into a
   single `<p>`, which CSS collapsed into one run-on line.
+- **ESM resolution** — extensionless relative imports in `api/` broke every
+  serverless function in production (`ERR_MODULE_NOT_FOUND`) while passing lint,
+  typecheck and the whole test suite locally.
+
+### The gap that let a production break through
+
+The suite mocked `fetch` everywhere and never loaded a serverless handler the
+way Node does, so a module-resolution failure was invisible. Two guards now
+cover it: `tsconfig.api.json` uses `nodenext` (missing extension = compile
+error) and `esm-resolution.test.ts` walks the real files. **Mocked tests say
+nothing about whether the module graph loads.**
 
 ## Browser tests (Playwright)
 

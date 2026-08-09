@@ -30,6 +30,13 @@ pieces they want, with full control over what changes.
 4. **Stay on React 19 + TypeScript + Tailwind v4.** No new UI libraries.
 5. **`api/` must not import from `src/`.** Shared serverless helpers go in
    `api/_lib/` (the underscore stops Vercel routing them as functions).
+6. **Every relative import inside `api/` needs an explicit `.js` extension.**
+   `package.json` sets `"type": "module"`, so Vercel runs the functions as
+   native ESM and Node will not guess extensions. Omitting one compiles, passes
+   Vitest, and then fails in production with `ERR_MODULE_NOT_FOUND`. This
+   shipped once and took out OAuth login. `tsconfig.api.json` uses `nodenext`
+   so it is now a compile error, and `api/esm-resolution.test.ts` checks it
+   independently of the compiler.
 
 ## Commands
 

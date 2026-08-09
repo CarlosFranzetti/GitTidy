@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { HttpError, parseModelJson, resolveStatus } from './_lib/http'
+import { HttpError, parseModelJson, resolveStatus } from './_lib/http.js'
 import {
   assertBodyWithinLimit,
   assertSameOrigin,
   assertWithinRateLimit,
   readBearerToken,
   resolveGitHubIdentity,
-} from './_lib/guard'
-import { resolveProviders, type GenerationMode } from './_lib/providers'
+} from './_lib/guard.js'
+import { resolveProviders, type GenerationMode } from './_lib/providers.js'
 
 type GenerateBody = {
   repos: Array<{

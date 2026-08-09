@@ -186,6 +186,35 @@ Phone setup walkthrough: **`docs/GEMINI-SETUP.md`**.
 - **Checklist shows only unmet items.** A row saying "Description set ✓" costs
   vertical space to say nothing actionable.
 
+### Production break: extensionless imports in `api/` (fixed)
+
+**Symptom:** `FUNCTION_INVOCATION_FAILED` / 500 on sign-in.
+**Real error:** `ERR_MODULE_NOT_FOUND: /var/task/api/_lib/env`.
+
+`package.json` sets `"type": "module"`, so Vercel runs the compiled functions as
+**native ESM**, and Node's ESM resolver does not guess file extensions. Every
+`import … from './_lib/env'` introduced with the `api/_lib/` refactor was
+unresolvable at runtime. This broke **every** serverless function — login and
+`/api/generate` alike — from the first pass onward.
+
+It passed lint, typecheck, 154 unit tests and 69 browser tests, because every
+one of those either mocks `fetch` or uses a bundler that happily resolves
+extensionless paths. **Nothing ever loaded a handler the way Node does.**
+
+Fixes, both in place:
+
+1. `tsconfig.api.json` now uses `module`/`moduleResolution: nodenext`, making a
+   missing extension a compile error (TS2835, which even suggests the fix).
+2. `api/esm-resolution.test.ts` walks the real files and replicates Node's
+   resolution independently of the compiler, so changing tsconfig cannot
+   silently re-open the hole.
+
+Both guards were verified by reintroducing the bug and confirming each fails.
+
+**Lesson worth keeping:** the earlier claim that the preview deployment was
+"verified" rested on fetching the static HTML, which never exercises a function.
+Static HTML returning 200 says nothing about the API.
+
 ### A bug introduced and removed in the same pass
 
 The first cut of metadata generation prefilled the homepage field from the

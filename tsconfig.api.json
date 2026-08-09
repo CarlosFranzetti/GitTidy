@@ -3,12 +3,15 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.api.tsbuildinfo",
     "target": "es2023",
     "lib": ["ES2023"],
-    "module": "esnext",
     "types": ["node"],
     "skipLibCheck": true,
 
-    /* Bundler mode */
-    "moduleResolution": "bundler",
+    /* package.json sets "type": "module", so Vercel runs these functions as
+       native ESM. nodenext makes TypeScript enforce the explicit file
+       extensions Node requires at runtime — without it, a missing ".js" only
+       shows up as ERR_MODULE_NOT_FOUND in production. */
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
@@ -20,5 +23,6 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["api"]
+  "include": ["api"],
+  "exclude": ["api/**/*.test.ts"]
 }

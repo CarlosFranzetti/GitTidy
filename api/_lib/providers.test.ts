@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveProviders } from './providers'
-import { HttpError } from './http'
+import { resolveProviders } from './providers.js'
+import { HttpError } from './http.js'
 
 const ENV_KEYS = [
   'GEMINI_API_KEY',

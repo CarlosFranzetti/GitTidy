@@ -1,5 +1,5 @@
-import { readEnvValue } from './env'
-import { HttpError, previewText } from './http'
+import { readEnvValue } from './env.js'
+import { HttpError, previewText } from './http.js'
 
 export type GenerationMode = 'full' | 'metadata'
 
