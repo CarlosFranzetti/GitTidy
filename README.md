@@ -1,89 +1,124 @@
-<p align="center">
-  <img src="GitTidyLogo.png" alt="GitTidy logo" width="96" />
-</p>
+# GitTidy
 
-<h1 align="center">GitTidy</h1>
+Polish the repo before anyone clicks it.
 
-<p align="center">Polish your GitHub repos before anyone clicks them.</p>
+GitTidy connects to GitHub, scores how well your repositories present
+themselves, drafts a better README, description and topics with AI, and writes
+back **only** the parts you tick.
 
-<p align="center">
-  <a href="https://git-tidy.vercel.app">Live app</a>
-</p>
+**Live:** <https://git-tidy.vercel.app>
 
 ---
 
-GitTidy connects to GitHub via OAuth, analyzes your repository quality (README, description, topics, deploy link), and uses AI to generate improved versions of those elements. You preview every suggestion and selectively apply only what you want — nothing is written automatically.
+## How it works
+
+Three steps, one screen each.
+
+1. **Pick** — your repositories, scored 0–100 and sorted worst-first so the ones
+   that need attention surface immediately.
+2. **Review** — see the current README and the generated one side by side on
+   desktop, or swapped with a **Current | New** toggle on mobile. Adjust tone,
+   add context, refine in plain English.
+3. **Apply** — tick exactly what to write. Every value is shown before you
+   confirm, and anything unticked is left completely untouched.
+
+**Nothing is ever written to GitHub without an explicit confirmation.** That is
+the point of the app.
+
+### Just need topics and a description?
+
+Skip the README entirely — **Suggest description + topics only** drafts just the
+metadata. It is faster, and much less likely to hit a free-model rate limit.
+
+---
 
 ## Features
 
-- Connect GitHub with OAuth — no tokens stored server-side
-- Repository quality scoring (README detail, description, topics, deploy link)
-- AI-generated README rewrite, description, topics, and deploy link suggestion
-- Tone selector: fun, professional, minimal, or technical
-- Refine the generated README with targeted instructions
-- Selective write-back: choose exactly which items to apply
-- Code analysis fallback when a repo has no README — AI infers from file structure
-- Confirmation modal before any GitHub write
+- **Repo health score** with a five-point checklist that updates live as you
+  edit drafts
+- **Selective write-back** — README, description, topics and homepage are
+  independent choices
+- **Refinement** — "make it shorter", "add a contributing section", in prose
+- **Four tones** — fun, professional, minimal, technical
+- **No README? No problem** — GitTidy reads `package.json`, docs and config
+  files to understand the project
+- **Topic validation** before anything is sent, so GitHub cannot reject the write
+- **Light / Dark / Auto** theme and an **Inter / Outfit / System** typeface
+  picker, both self-hosted with no external font requests
+- **Copy or download** the generated README without touching GitHub at all
 
-## Tech stack
+---
 
-- React 19 + TypeScript
-- Tailwind CSS v4
-- Vite + Vercel serverless functions
-- GitHub API (OAuth + REST)
-- OpenRouter (Random free models. Its free, you get what you get.)
-
-## Local setup
+## Getting started
 
 ```bash
 npm install
+npm run dev        # UI only, port 5173 — no AI or OAuth
+npm run dev:full   # full stack via vercel dev, port 3000
 ```
 
-Create `.env.local` in the project root:
+Create `.env.local`:
 
 ```env
-OPENROUTER_API_KEY=your_openrouter_key_here
+OPENROUTER_API_KEY=your_key_here
 OPENROUTER_MODEL=baidu/cobuddy:free
-GITHUB_CLIENT_ID=your_github_oauth_client_id
-GITHUB_CLIENT_SECRET=your_github_oauth_client_secret
+OPENROUTER_FALLBACK_MODELS=
+GITHUB_CLIENT_ID=your_client_id
+GITHUB_CLIENT_SECRET=your_client_secret
+# Optional: public_repo drops access to private repositories entirely.
+GITHUB_OAUTH_SCOPE=repo
 ```
 
-For GitHub OAuth, register an app with callback URL:
+Register a GitHub OAuth app with the callback URL:
 
 ```
 http://localhost:3000/api/github/oauth/callback
 ```
 
-Run the full local stack (frontend + API):
+### Commands
 
-```bash
-npm run dev:full
-```
-
-Frontend only (no API):
-
-```bash
-npm run dev
-```
-
-## Scripts
-
-| Command | Purpose |
-|---------|---------|
-| `npm run dev` | Vite frontend only (port 5173) |
-| `npm run dev:full` | Vite + Vercel API routes (port 3000) |
-| `npm run build` | Type-check and build |
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Vite dev server, UI only |
+| `npm run dev:full` | Vite + serverless functions |
+| `npm run build` | Type-check and build to `dist/` |
 | `npm run lint` | ESLint |
+| `npm run typecheck` | App, API and test sources |
+| `npm test` | 130 unit and component tests |
+| `npm run test:e2e` | Playwright browser matrix |
+| `npm run test:all` | Both suites |
 
-## Environment variables
+---
 
-| Variable | Required | Notes |
-|----------|----------|-------|
-| `OPENROUTER_API_KEY` | Yes | Server-only — do not prefix with `VITE_` |
-| `OPENROUTER_MODEL` | No | Defaults to `baidu/cobuddy:free` |
-| `GITHUB_CLIENT_ID` | Yes | GitHub OAuth app client ID |
-| `GITHUB_CLIENT_SECRET` | Yes | GitHub OAuth app secret |
+## Tech
 
-## License
+React 19 · TypeScript · Tailwind CSS v4 · Vite · Vercel Functions · OpenRouter
 
-MIT
+No state library and no UI framework — deliberately. State lives in `App.tsx`;
+styling is Tailwind with a class-based dark mode.
+
+---
+
+## Documentation
+
+| Document | Contents |
+| --- | --- |
+| [`memorystate.md`](./memorystate.md) | Full project state, decisions, bugs fixed, known gaps |
+| [`docs/SECURITY.md`](./docs/SECURITY.md) | Security review, fixes, accepted trade-offs |
+| [`docs/TESTING.md`](./docs/TESTING.md) | Test strategy and browser matrix |
+| [`docs/AI-PROVIDERS.md`](./docs/AI-PROVIDERS.md) | Free AI provider comparison and recommendation |
+| [`CLAUDE.md`](./CLAUDE.md) | Guidance for AI coding agents |
+
+---
+
+## A note on AI reliability
+
+GitTidy uses OpenRouter's free model tier, which is a pool shared across all
+OpenRouter users. It rate limits, and models occasionally return prose instead
+of JSON. GitTidy retries with backoff, walks a configurable chain of free
+fallback models, and parses defensively.
+
+If generation fails repeatedly, try **Suggest description + topics only** — it
+asks for far less output and usually succeeds when a full README call will not.
+
+See [`docs/AI-PROVIDERS.md`](./docs/AI-PROVIDERS.md) for stronger free options.

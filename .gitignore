@@ -52,3 +52,8 @@ coverage/
 .claude/
 .superpowers/
 AGENTS.md
+
+# Test and build artifacts
+coverage
+playwright-report
+test-results

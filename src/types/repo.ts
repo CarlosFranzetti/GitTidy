@@ -1,8 +1,4 @@
-export type RepoIssueType =
-  | 'readme'
-  | 'description'
-  | 'homepage'
-  | 'topics'
+export type RepoIssueType = 'readme' | 'description' | 'homepage' | 'topics'
 
 export type RepoIssue = {
   type: RepoIssueType
@@ -17,9 +13,12 @@ export type RepoScoreBreakdown = {
   topics: number
 }
 
-export type RepoInsight = {
-  label: string
-  value: string
+export type ScoreChecklist = {
+  hasReadme: boolean
+  hasDetailedReadme: boolean
+  hasDescription: boolean
+  hasHomepage: boolean
+  hasTopics: boolean
 }
 
 export type RepoRecord = {
@@ -34,10 +33,8 @@ export type RepoRecord = {
   topics: string[]
   defaultBranch: string
   readmeWordCount: number
-  readmeExcerpt?: string
   score: number
   scoreBreakdown: RepoScoreBreakdown
+  checklist: ScoreChecklist
   issues: RepoIssue[]
-  insights: RepoInsight[]
-  readmeLoaded?: boolean
 }

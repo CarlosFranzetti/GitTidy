@@ -1,32 +1,99 @@
 @import 'tailwindcss';
+@import './fonts.css';
+
+/* Class-based dark mode. Replaces the theme ternaries that were repeated
+   inline throughout the old App.tsx. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  color: #e2e8f0;
-  background: #070b12;
+  /* Overridden at runtime by the font picker. */
+  --font-ui: 'Inter';
+  --font-mono: 'JetBrains Mono';
+
+  --app-bg: #f6f7f9;
+  --app-fg: #0b1220;
+
+  color-scheme: light;
   font-family:
-    'Outfit', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
-    sans-serif;
-  font-synthesis: none;
+    var(--font-ui), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, sans-serif;
+  font-synthesis-weight: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+:root.dark {
+  --app-bg: #070b12;
+  --app-fg: #e8edf5;
+
+  color-scheme: dark;
+}
+
 html {
-  background: #070b12;
-  scroll-behavior: smooth;
+  background: var(--app-bg);
+  color: var(--app-fg);
+  /* Keeps iOS Safari from zooming the page when an input is focused. */
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
   min-width: 320px;
+  background: var(--app-bg);
+  color: var(--app-fg);
+  /* 100vh fallback first for Safari < 15.4 / Chrome < 108, dvh where supported. */
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* Respects the iPhone home indicator and notch. */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 #root {
+  min-height: 100vh;
   min-height: 100dvh;
 }
 
-@keyframes macos-spin {
+.font-mono,
+code,
+pre,
+kbd {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+}
+
+/* Hide the horizontal scrollbar on the segmented control and chip rows while
+   keeping them scrollable by touch. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes gt-spin {
   from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes gt-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.animate-rise {
+  animation: gt-rise 0.22s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+/* Users who ask their OS for less motion get none of it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

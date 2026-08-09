@@ -1,19 +1,33 @@
 import type {
   GenerateSuggestionsRequest,
   GenerateSuggestionsResponse,
-  InferContextRequest,
-  InferContextResponse,
 } from './types'
 
-export async function generateSuggestions(input: GenerateSuggestionsRequest) {
-  return postJson<GenerateSuggestionsResponse>('/api/generate', input)
+export class AiClientError extends Error {
+  /** Raw model output, present only when the response could not be parsed. */
+  rawContent?: string
+  status: number
+
+  constructor(message: string, status: number, rawContent?: string) {
+    super(message)
+    this.name = 'AiClientError'
+    this.status = status
+    this.rawContent = rawContent
+  }
 }
 
-export async function inferContext(input: InferContextRequest) {
-  return postJson<InferContextResponse>('/api/context', input)
+export async function generateSuggestions(
+  input: GenerateSuggestionsRequest,
+  options: { signal?: AbortSignal; token?: string } = {},
+) {
+  return postJson<GenerateSuggestionsResponse>('/api/generate', input, options)
 }
 
-async function postJson<T extends object>(path: string, input: unknown) {
+async function postJson<T extends object>(
+  path: string,
+  input: unknown,
+  options: { signal?: AbortSignal; token?: string },
+): Promise<T> {
   let response: Response
 
   try {
@@ -21,26 +35,31 @@ async function postJson<T extends object>(path: string, input: unknown) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(options.token ? { 'X-GitHub-Token': options.token } : {}),
       },
       body: JSON.stringify(input),
+      signal: options.signal,
     })
-  } catch {
-    throw new Error(
-      `The local app could not reach ${path}. Start GitTidy with \`npm run dev:full\` or deploy it on Vercel to test OpenRouter generation.`,
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error
+    throw new AiClientError(
+      `Could not reach ${path}. Run GitTidy with \`npm run dev:full\` or deploy it to Vercel to use AI generation.`,
+      0,
     )
   }
 
   const contentType = response.headers.get('content-type') ?? ''
-  const payload: T | { error?: string; rawContent?: string } = contentType.includes(
-    'application/json',
-  )
-    ? ((await response.json()) as T | { error?: string; rawContent?: string })
+  const payload: unknown = contentType.includes('application/json')
+    ? await response.json().catch(() => ({}))
     : { error: 'The AI endpoint returned a non-JSON response.' }
 
   if (!response.ok) {
-    const message = ('error' in payload && payload.error) || 'Generation failed.'
-    const rawContent = 'rawContent' in payload ? (payload.rawContent as string | undefined) : undefined
-    throw Object.assign(new Error(message), { rawContent })
+    const record = (payload ?? {}) as { error?: string; rawContent?: string }
+    throw new AiClientError(
+      record.error || 'Generation failed.',
+      response.status,
+      record.rawContent,
+    )
   }
 
   return payload as T
