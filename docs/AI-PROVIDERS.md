@@ -1,11 +1,14 @@
 # Free AI providers for GitTidy
 
-**Status:** recommendation only. No provider change has been made — GitTidy still
-calls OpenRouter exactly as before.
+**Status: implemented.** GitTidy now calls **Gemini first** and falls back to
+OpenRouter. This document explains why, and what the remaining options are.
 
-## Why generation is flaky today
+Setup instructions live in [`GEMINI-SETUP.md`](./GEMINI-SETUP.md). Removing
+`GEMINI_API_KEY` restores the previous OpenRouter-only behaviour exactly.
 
-`api/generate.ts` sends one request to whatever `OPENROUTER_MODEL` names,
+## Why OpenRouter alone was flaky
+
+The original code sent one request to whatever `OPENROUTER_MODEL` named,
 defaulting to `baidu/cobuddy:free`. OpenRouter's `:free` tier is a **shared pool**
 across every OpenRouter user, which produces three distinct failure modes:
 
@@ -20,9 +23,10 @@ three separate times, and the parser had a three-stage fallback. That is strong
 evidence the free model routinely disobeyed the format — the code was written
 around observed flakiness, not a hypothetical one.
 
-## What changed (zero cost)
+## What changed (still zero cost)
 
-The provider is unchanged. Reliability was added without introducing spend:
+Gemini's free tier replaced OpenRouter as the first choice, and the retry
+machinery below now applies across both providers:
 
 - **Retry with backoff** on 429/408/5xx and timeouts.
 - **Fallback chain** via `OPENROUTER_FALLBACK_MODELS` (comma-separated). Every
@@ -36,11 +40,11 @@ The provider is unchanged. Reliability was added without introducing spend:
   now read differently instead of all claiming "did not respond before the
   timeout".
 
-Suggested `.env` value:
+Suggested fallback `.env` values:
 
 ```env
 OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free
-OPENROUTER_FALLBACK_MODELS=google/gemma-2-9b-it:free,mistralai/mistral-7b-instruct:free,baidu/cobuddy:free
+OPENROUTER_FALLBACK_MODELS=google/gemma-2-9b-it:free,mistralai/mistral-7b-instruct:free
 ```
 
 Check <https://openrouter.ai/models?max_price=0> for models currently free —
@@ -48,7 +52,7 @@ the list changes without notice, which is the core problem with relying on it.
 
 ## Ranked free alternatives
 
-### 1. Google AI Studio (Gemini) — recommended
+### 1. Google AI Studio (Gemini) — **now the default**
 
 The strongest free tier available. Roughly **1,500 requests/day** and ~15/min on
 Flash models, a 1M-token context window, no credit card, and first-class
@@ -61,8 +65,9 @@ class of "model returned prose instead of JSON" bugs.
   rather than a load-bearing component.
 - **Caveat:** Google cut free quotas in late 2025. Confirm current limits at
   <https://ai.google.dev> before depending on the numbers above.
-- **Migration cost:** low. One new `callGemini()` in `api/generate.ts`; the
-  prompt builder and response normaliser are reusable as-is.
+- **Implemented in** `api/_lib/providers.ts`. GitTidy sends a `responseSchema`
+  with `responseMimeType: application/json`, so the model is structurally
+  constrained to the expected object.
 
 ### 2. Groq — best when latency matters
 
@@ -95,7 +100,23 @@ looks like a free ride on an existing token. Rule it out:
 - Limits were tight anyway: ~50 requests/day on high-tier models, ~10/min, with
   an 8K input / 4K output ceiling that a 7,000-character README would strain.
 
-## The recommended endgame
+## Current chain
+
+```
+Gemini (schema-enforced)           ← GEMINI_API_KEY
+  └─ 429/5xx/timeout → next Gemini model
+       └─ still failing → OpenRouter free pool   ← OPENROUTER_API_KEY
+            └─ 429/5xx → next free OpenRouter model
+```
+
+Each provider exposes a list of models; `createCompletion` in `api/generate.ts`
+walks providers, then models within each, retrying transient failures once with
+backoff. A parse failure skips straight to the next model, since the same model
+will not suddenly learn the format.
+
+The UI reports which model answered, so a silent fallback is visible.
+
+## The remaining endgame
 
 Free tiers have **independent** rate limits, so routing across providers
 multiplies free capacity. The most robust zero-cost architecture is a provider
@@ -114,12 +135,13 @@ names against one provider. Generalising it to walk a list of *providers* — ea
 with its own base URL, key and schema dialect — is a contained change to that
 one function.
 
-**Suggested order of work if you pursue it:**
+Step 1 of that chain is done. Adding Groq or Cerebras now means writing one
+more `Provider` object in `api/_lib/providers.ts` and appending it to
+`resolveProviders()` — no changes to `generate.ts` at all.
 
-1. Add Gemini as primary, keep OpenRouter as the fallback. Ships the biggest win
-   with the least code.
-2. Measure. If Gemini's quota holds, stop — a two-provider chain may be plenty.
-3. Add Groq only if you want the speed, or if Gemini's daily cap is hit.
+**Do this only if Gemini's quota turns out to be a real constraint.** Two
+providers is already ample for a personal tool, and each extra link is another
+API surface to keep working.
 
 ## Sources
 

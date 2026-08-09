@@ -34,7 +34,6 @@ describe('Markdown', () => {
 
   it('strips javascript: URLs from links', () => {
     const { container } = render(
-      // eslint-disable-next-line no-script-url
       <Markdown>{'[click me](javascript:alert(1))'}</Markdown>,
     )
 

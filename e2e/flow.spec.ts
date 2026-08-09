@@ -86,6 +86,54 @@ test('metadata-only path needs no README generation', async ({ page }) => {
   await expect(page.getByRole('checkbox', { name: /description/i })).toBeChecked()
 })
 
+test('expands the generated README into a full-screen editor', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: /gittidy/i }).first().click()
+  await page.getByRole('button', { name: /generate readme/i }).click()
+
+  await page.getByRole('button', { name: /^edit$/i }).first().click()
+
+  const editor = page.getByRole('dialog', { name: /generated readme/i })
+  await expect(editor).toBeVisible()
+
+  const source = editor.getByRole('textbox', { name: /markdown source/i })
+  await source.fill('# Edited by hand\n\nMy own words.')
+  await editor.getByRole('button', { name: /save draft/i }).click()
+
+  await expect(editor).toBeHidden()
+
+  // The edit survives into the Apply step and is what gets written.
+  await page.getByRole('button', { name: /choose changes/i }).click()
+  await page.getByRole('button', { name: /review & apply/i }).click()
+  await expect(page.getByRole('dialog')).toContainText(/README/i)
+})
+
+test('the current README opens read-only', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: /gittidy/i }).first().click()
+  await expect(page.getByRole('button', { name: /generate readme/i })).toBeVisible()
+
+  await page.getByRole('button', { name: /expand/i }).first().click()
+
+  const viewer = page.getByRole('dialog', { name: /current readme/i })
+  await expect(viewer).toBeVisible()
+  await expect(viewer.getByRole('textbox')).toHaveCount(0)
+  await viewer.getByRole('button', { name: /done/i }).click()
+  await expect(viewer).toBeHidden()
+})
+
+test('offers deploy guidance when the repo has no homepage', async ({ page }) => {
+  await page.goto('/')
+  // bare-project has no homepage set.
+  await page.getByRole('button', { name: /bare-project/i }).first().click()
+  await page.getByRole('button', { name: /description \+ topics only/i }).click()
+  await page.getByRole('button', { name: /skip|choose changes/i }).first().click()
+
+  const link = page.getByRole('link', { name: /deploy on vercel/i })
+  await expect(link).toBeVisible()
+  await expect(link).toHaveAttribute('href', /vercel\.com/)
+})
+
 test('swaps between the current and generated README', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 780 })
   await page.goto('/')

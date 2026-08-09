@@ -9,6 +9,13 @@ const LABELS: Array<[keyof ScoreChecklist, string]> = [
   ['hasTopics', 'At least 3 topics'],
 ]
 
+/**
+ * Only the unmet items are listed.
+ *
+ * A row saying "Description set ✓" costs vertical space to tell the user
+ * nothing actionable, and on a phone that space is the difference between the
+ * README being on screen or not. The count and bar still convey overall state.
+ */
 export function Checklist({
   checklist,
   score,
@@ -16,11 +23,12 @@ export function Checklist({
   checklist: ScoreChecklist
   score: number
 }) {
-  const done = LABELS.filter(([key]) => checklist[key]).length
+  const missing = LABELS.filter(([key]) => !checklist[key])
+  const done = LABELS.length - missing.length
 
   return (
-    <div className="rounded-2xl border border-slate-200 p-4 dark:border-white/10">
-      <div className="mb-3 flex items-baseline justify-between">
+    <div className="rounded-2xl border border-slate-200 p-3.5 dark:border-white/10">
+      <div className="flex items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold">Repo health</h3>
         <span className="text-xs tabular-nums">
           <Muted>
@@ -30,7 +38,7 @@ export function Checklist({
       </div>
 
       <div
-        className="mb-3 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10"
+        className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10"
         role="progressbar"
         aria-valuenow={score}
         aria-valuemin={0}
@@ -43,24 +51,30 @@ export function Checklist({
         />
       </div>
 
-      <ul className="space-y-2">
+      {missing.length === 0 ? (
+        <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">
+          ✓ Everything checks out.
+        </p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {missing.map(([key, label]) => (
+            <li key={key} className="flex items-center gap-2 text-xs">
+              <span
+                aria-hidden="true"
+                className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-slate-200 text-[10px] text-slate-500 dark:bg-white/10 dark:text-slate-400"
+              >
+                ·
+              </span>
+              <span className="text-slate-600 dark:text-slate-400">{label}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* The full state stays available to assistive technology. */}
+      <ul className="sr-only">
         {LABELS.map(([key, label]) => (
-          <li key={key} className="flex items-center gap-2 text-sm">
-            <span
-              aria-hidden="true"
-              className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-xs ${
-                checklist[key]
-                  ? 'bg-emerald-500 text-white dark:bg-emerald-400/20 dark:text-emerald-300'
-                  : 'bg-slate-200 text-slate-400 dark:bg-white/10 dark:text-slate-500'
-              }`}
-            >
-              {checklist[key] ? '✓' : '·'}
-            </span>
-            <span className={checklist[key] ? '' : 'text-slate-600 dark:text-slate-400'}>
-              {label}
-            </span>
-            <span className="sr-only">{checklist[key] ? 'done' : 'not done'}</span>
-          </li>
+          <li key={key}>{`${label}: ${checklist[key] ? 'done' : 'not done'}`}</li>
         ))}
       </ul>
     </div>

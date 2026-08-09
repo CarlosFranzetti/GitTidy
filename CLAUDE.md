@@ -8,7 +8,8 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 ## Project overview
 
 GitTidy is a web app for students and indie developers. It connects to GitHub
-via OAuth, scores repository presentation quality, uses AI (OpenRouter) to draft
+via OAuth, scores repository presentation quality, uses AI (Gemini, falling
+back to OpenRouter) to draft
 an improved README, description and topics, and writes back only what the user
 explicitly selects.
 
@@ -38,7 +39,7 @@ npm run dev:full   # vercel dev, port 3000 (API works)
 npm run build      # tsc -b && vite build
 npm run lint
 npm run typecheck  # app + api + test sources
-npm test           # Vitest, 130 tests
+npm test           # Vitest, 154 tests
 npm run test:e2e   # Playwright browser matrix
 npm run test:all
 ```
@@ -55,12 +56,12 @@ src/
     github/            API client, response normalisation
     ai/                /api/generate client and types
     repos/             scoring.ts (single source of truth), prompt.ts
-  lib/                 storage, clipboard, theme, fonts, steps
+  lib/                 storage, clipboard, theme, fonts, steps, languages
   types/repo.ts        RepoRecord and friends
 api/
   generate.ts          The only AI endpoint
   github/oauth/        start.ts, callback.ts
-  _lib/                env, http, guard, oauth — shared, not routed
+  _lib/                env, http, guard, oauth, providers — shared, not routed
 e2e/                   Playwright specs and network fixtures
 ```
 
@@ -81,7 +82,7 @@ twice on every keystroke.
 3. App reads the fragment, stores the token, scrubs the URL
 4. `selectRepo` fetches details + README in parallel; falls back to a digest of
    `package.json` and docs when there is no README
-5. `/api/generate` → OpenRouter → normalised preview
+5. `/api/generate` → Gemini, falling back to OpenRouter → normalised preview
 6. Confirmation dialog → GitHub write → repo reloaded
 
 ### Async safety
@@ -104,6 +105,10 @@ pattern appeared 30+ times in the old `App.tsx` and is why a hardcoded
 Other rules:
 
 - Interactive controls are `min-h-11` (44px). An e2e test enforces this.
+- **Dark is the default theme**, not `system`. An e2e test enforces this.
+- The review step must fit roughly one phone screen; an e2e test measures it.
+  The inline README pane is intentionally short — the full-screen
+  `readme-editor.tsx` is where reading and editing happen.
 - Nothing may cause horizontal page scroll at 320px. An e2e test enforces this;
   wide content scrolls inside its own `overflow-x-auto` container.
 - `dvh` units always follow a `vh` fallback line.
@@ -125,19 +130,28 @@ repo showed two different scores in two places. Do not add another.
 `api/_lib/guard.ts` and `docs/SECURITY.md`. It is not an open proxy; keep it
 that way.
 
-Free OpenRouter models rate limit and often ignore "JSON only", so the endpoint
-retries with backoff, walks a chain of free fallback models, requests
-`response_format: json_object`, and parses defensively via `parseModelJson`.
+`api/_lib/providers.ts` owns provider selection. **Gemini first** when
+`GEMINI_API_KEY` is set, then OpenRouter. Gemini is sent a `responseSchema`, so
+it is structurally constrained to valid JSON; OpenRouter free models are only
+asked politely, which is why `parseModelJson` must stay lenient.
+
+`createCompletion` walks providers, then models within each, retrying transient
+failures (429/408/5xx/timeout) once with backoff. A parse failure skips to the
+next model rather than retrying the same one.
+
+Adding a provider means writing one `Provider` object and appending it to
+`resolveProviders()`. Do not restructure `generate.ts` for it.
 
 `mode: 'metadata'` skips README generation entirely — much less output, so it
 succeeds when a full README call would be throttled.
 
 Repository content is fenced in `<<<BEGIN_REPO_CONTENT` delimiters and labelled
-untrusted, because a README is attacker-controllable. Keep the fencing.
+untrusted, because a README is attacker-controllable. Keep the fencing. The
+`language` field is re-validated server-side against a strict pattern for the
+same reason — it reaches the prompt.
 
-Provider alternatives are analysed in `docs/AI-PROVIDERS.md`. **The user's
-explicit instruction was to keep OpenRouter and only recommend alternatives** —
-do not swap providers without asking.
+**Never prefill the homepage field from model output.** A suggested deploy URL
+is a guess, and writing a dead link to GitHub is worse than an empty field.
 
 ## Testing
 
@@ -157,7 +171,9 @@ and `confirm-dialog.test.tsx` (itemised change list). Do not weaken them.
 
 ## Known gaps
 
-Listed with priorities in `memorystate.md` §8. The notable ones: repo listing
-caps at 100 with no pagination, README SHA can go stale (409 is surfaced but not
-auto-retried), and Firefox/WebKit e2e projects are configured but were never
-executed in the dev sandbox.
+Listed with priorities in `memorystate.md` §8, and as planned work in
+`docs/ROADMAP.md`. The notable ones: repo listing caps at 100 with no
+pagination, README SHA can go stale (409 is surfaced but not auto-retried),
+Firefox/WebKit e2e projects are configured but were never executed in the dev
+sandbox, and the default Gemini model names were chosen without a live key to
+verify against.

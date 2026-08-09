@@ -3,6 +3,8 @@ import { ActionBar } from './components/action-bar'
 import { Checklist } from './components/checklist'
 import { ConfirmDialog, type PendingAction } from './components/confirm-dialog'
 import { ReadmeCompare, type ComparePane } from './components/readme-compare'
+import { ReadmeEditor } from './components/readme-editor'
+import { DeployHelp } from './components/deploy-help'
 import { RepoPicker } from './components/repo-picker'
 import { SettingsMenu } from './components/settings-menu'
 import { Stepper } from './components/stepper'
@@ -34,11 +36,13 @@ import { copyText } from './lib/clipboard'
 import { applyFont, resolveFont, type FontChoice } from './lib/fonts'
 import { readStored, removeStored, writeStored } from './lib/storage'
 import { applyTheme, resolveTheme, type Theme } from './lib/theme'
+import { DEFAULT_LANGUAGE, LANGUAGES, type Language } from './lib/languages'
 import type { RepoRecord } from './types/repo'
 
 const TOKEN_KEY = 'gittidy.github-token'
 const THEME_KEY = 'gittidy.theme'
 const FONT_KEY = 'gittidy.font'
+const LANGUAGE_KEY = 'gittidy.language'
 
 type ActiveRepo = {
   repo: RepoRecord
@@ -106,6 +110,10 @@ export default function App() {
   const [draftTopics, setDraftTopics] = useState('')
   const [draftHomepage, setDraftHomepage] = useState('')
 
+  const [language, setLanguage] = useState<Language>(
+    () => (readStored(LANGUAGE_KEY) as Language | null) ?? DEFAULT_LANGUAGE,
+  )
+  const [expanded, setExpanded] = useState<ComparePane | null>(null)
   const [tone, setTone] = useState<ToneId>('fun')
   const [notes, setNotes] = useState('')
   const [refinement, setRefinement] = useState('')
@@ -145,6 +153,10 @@ export default function App() {
     applyFont(font)
     writeStored(FONT_KEY, font)
   }, [font])
+
+  useEffect(() => {
+    writeStored(LANGUAGE_KEY, language)
+  }, [language])
 
   // Persist the token handed over in the fragment, then scrub the URL.
   useEffect(() => {
@@ -206,6 +218,7 @@ export default function App() {
       setRefinement('')
       setNotes('')
       setPane('current')
+      setExpanded(null)
       setDebugRaw(null)
       setDraftDescription(repo.description)
       setDraftTopics(repo.topics.join(', '))
@@ -284,6 +297,7 @@ export default function App() {
           {
             repos: [toGenerationInput(activeRepo.repo, sourceText)],
             mode,
+            ...(language !== DEFAULT_LANGUAGE ? { language } : {}),
             context: {
               projectGoal:
                 mode === 'metadata'
@@ -318,11 +332,9 @@ export default function App() {
 
         if (preview.description) setDraftDescription(preview.description)
         if (preview.topics.length > 0) setDraftTopics(preview.topics.join(', '))
-        if (!draftHomepage && preview.deploySuggestion) {
-          // Only prefill a homepage when the suggestion is an actual URL.
-          const url = preview.deploySuggestion.match(/https?:\/\/\S+/)?.[0]
-          if (url) setDraftHomepage(url)
-        }
+        // The homepage is deliberately never prefilled from the model. A
+        // suggested URL is a guess, and writing a dead link to GitHub is worse
+        // than leaving the field empty.
 
         setWriteSelection({
           readme: mode === 'full',
@@ -352,7 +364,7 @@ export default function App() {
         setBusy('')
       }
     },
-    [activeRepo, draftHomepage, generated, githubToken, notes, notify, tone],
+    [activeRepo, draftHomepage, generated, githubToken, language, notes, notify, tone],
   )
 
   function toggleSelection(field: keyof WriteSelection) {
@@ -539,6 +551,9 @@ export default function App() {
               checklist={liveScore?.checklist ?? activeRepo.repo.checklist}
               score={liveScore?.score ?? activeRepo.repo.score}
               debugRaw={debugRaw}
+              language={language}
+              onLanguageChange={setLanguage}
+              onExpand={setExpanded}
               onPaneChange={setPane}
               onToneChange={setTone}
               onNotesChange={setNotes}
@@ -571,6 +586,27 @@ export default function App() {
           )}
         </main>
       )}
+
+      {expanded && activeRepo ? (
+        <ReadmeEditor
+          title={expanded === 'current' ? 'Current README' : 'Generated README'}
+          value={
+            expanded === 'current'
+              ? activeRepo.readme || activeRepo.codeContext
+              : (generated?.readmeMd ?? '')
+          }
+          onSave={
+            expanded === 'generated' && generated
+              ? (value) => {
+                  setGenerated({ ...generated, readmeMd: value })
+                  setWriteSelection((current) => ({ ...current, readme: true }))
+                  notify('README draft updated.', 'success')
+                }
+              : undefined
+          }
+          onClose={() => setExpanded(null)}
+        />
+      ) : null}
 
       {pendingAction ? (
         <ConfirmDialog
@@ -684,6 +720,9 @@ function ReviewStep({
   checklist,
   score,
   debugRaw,
+  language,
+  onLanguageChange,
+  onExpand,
   onPaneChange,
   onToneChange,
   onNotesChange,
@@ -706,6 +745,9 @@ function ReviewStep({
   checklist: RepoRecord['checklist']
   score: number
   debugRaw: string | null
+  language: Language
+  onLanguageChange: (language: Language) => void
+  onExpand: (pane: ComparePane) => void
   onPaneChange: (pane: ComparePane) => void
   onToneChange: (tone: ToneId) => void
   onNotesChange: (value: string) => void
@@ -757,6 +799,23 @@ function ReviewStep({
                     ))}
                   </div>
                 </div>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em]">
+                    <Muted>README language</Muted>
+                  </span>
+                  <select
+                    value={language}
+                    onChange={(event) => onLanguageChange(event.target.value as Language)}
+                    className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 sm:text-sm dark:border-white/12 dark:bg-black/25 dark:text-slate-100"
+                  >
+                    {LANGUAGES.map((entry) => (
+                      <option key={entry} value={entry}>
+                        {entry}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
                 <TextArea
                   value={notes}
                   onChange={(event) => onNotesChange(event.target.value)}
@@ -791,37 +850,43 @@ function ReviewStep({
               isLoading={activeRepo.isLoading}
               pane={pane}
               onPaneChange={onPaneChange}
+              onExpand={onExpand}
             />
 
             {generated?.model ? (
-              <p className="mt-2 text-xs">
+              <p className="mt-1.5 truncate text-xs">
                 <Muted>Drafted by {generated.model}</Muted>
               </p>
             ) : null}
 
             {generated ? (
-              <div className="mt-3 space-y-2">
-                <TextArea
-                  value={refinement}
-                  onChange={(event) => onRefinementChange(event.target.value)}
-                  placeholder="Ask for a change: add a contributing section, make it shorter…"
-                  rows={2}
-                  aria-label="Refinement instructions"
-                />
-                <div className="flex flex-wrap gap-2">
-                  <Button onClick={onRefine} disabled={isBusy || !refinement.trim()}>
-                    {busy === 'refine' ? (
-                      <>
-                        <Spinner className="h-4 w-4" /> Refining…
-                      </>
-                    ) : (
-                      'Refine'
-                    )}
-                  </Button>
-                  <Button onClick={onCopy}>Copy</Button>
-                  <Button onClick={onDownload}>Download</Button>
+              <details className="mt-3 rounded-2xl border border-slate-200 dark:border-white/10">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center px-4 text-sm font-medium">
+                  Refine, copy or download
+                </summary>
+                <div className="space-y-2 px-4 pb-4">
+                  <TextArea
+                    value={refinement}
+                    onChange={(event) => onRefinementChange(event.target.value)}
+                    placeholder="Ask for a change: add a contributing section, make it shorter…"
+                    rows={2}
+                    aria-label="Refinement instructions"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={onRefine} disabled={isBusy || !refinement.trim()}>
+                      {busy === 'refine' ? (
+                        <>
+                          <Spinner className="h-4 w-4" /> Refining…
+                        </>
+                      ) : (
+                        'Refine'
+                      )}
+                    </Button>
+                    <Button onClick={onCopy}>Copy</Button>
+                    <Button onClick={onDownload}>Download</Button>
+                  </div>
                 </div>
-              </div>
+              </details>
             ) : null}
 
             {debugRaw ? (
@@ -1004,6 +1069,10 @@ function ApplyStep({
               aria-label="Homepage URL"
             />
           </WriteRow>
+
+          {/* Rendered whether or not the row is ticked, so someone who has not
+              deployed yet still finds out how — it is the most common gap. */}
+          {!homepage.trim() ? <DeployHelp /> : null}
         </div>
       </Card>
 

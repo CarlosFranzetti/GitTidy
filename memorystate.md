@@ -1,7 +1,7 @@
 # GitTidy — Memory State
 
 Durable context for anyone (human or agent) picking this project up. Last
-updated: **2026-08-09**.
+updated: **2026-08-09** (second pass).
 
 ---
 
@@ -37,6 +37,8 @@ src/
     ui.tsx                    Button, TextField, TextArea, Card, Muted, ScorePill, Spinner
     markdown.tsx              Hardened react-markdown wrapper
     readme-compare.tsx        Current|New segmented switch (side-by-side at xl:)
+    readme-editor.tsx         Full-screen README reader and markdown editor
+    deploy-help.tsx           Vercel/Netlify/Pages links when no homepage is set
     repo-picker.tsx           Step 1: filter, sort, select
     checklist.tsx             Repo health panel with progress bar
     confirm-dialog.tsx        Write confirmation; focus trap; itemised changes
@@ -49,12 +51,12 @@ src/
     github/{client,normalize,types}.ts
     ai/{client,types}.ts
     repos/{scoring,prompt}.ts
-  lib/{storage,clipboard,theme,fonts,steps}.ts
+  lib/{storage,clipboard,theme,fonts,steps,languages}.ts
   types/repo.ts
 api/
   generate.ts                 The only AI endpoint
   github/oauth/{start,callback}.ts
-  _lib/{env,http,guard,oauth}.ts   Shared; underscore keeps Vercel from routing them
+  _lib/{env,http,guard,oauth,providers}.ts  Shared; underscore keeps Vercel from routing them
 e2e/                          Playwright specs + network fixtures
 ```
 
@@ -65,7 +67,7 @@ e2e/                          Playwright specs + network fixtures
 3. App reads the fragment, stores the token, scrubs the URL
 4. `loadRepos` → `fetchViewer` + `fetchRepositories` → `normalizeGitHubRepo`
 5. Select repo → details + README in parallel; no README → config/docs digest
-6. Generate → `/api/generate` → OpenRouter → normalised preview
+6. Generate → `/api/generate` → Gemini, falling back to OpenRouter → preview
 7. Tick changes → confirmation dialog → GitHub write → repo reloaded
 
 ---
@@ -82,7 +84,7 @@ security, tests, dead-code removal) plus a parallel Sonnet code review.
 | Question | Chosen |
 | --- | --- |
 | Layout | Step flow (Pick → Review → Apply) with a sticky action bar |
-| AI provider | **Keep OpenRouter as-is**; research and *recommend* free alternatives only |
+| AI provider | Pass 1: keep OpenRouter, recommend only. Pass 2: **implement Gemini** with OpenRouter fallback |
 | Fonts | Self-hosted Inter / Outfit / System with an in-app picker |
 | Testing | Vitest units + Playwright cross-browser matrix |
 
@@ -130,15 +132,67 @@ unreachable from `App.tsx`: `app-shell.tsx`, `panel.tsx`, `score-ring.tsx`,
 - **Model attribution** — the UI shows which model produced a draft.
 - **Error boundary** with a reload path.
 
-### AI reliability (no provider change, no cost)
+### AI reliability (pass one — no provider change)
 
-`api/generate.ts` now retries with backoff on 429/408/5xx/timeout, walks a
-fallback chain of **free** models via `OPENROUTER_FALLBACK_MODELS`, and requests
-`response_format: json_object`. The lenient three-tier JSON parser is retained
-as a safety net.
+`api/generate.ts` gained retry with backoff on 429/408/5xx/timeout, a fallback
+chain of **free** models, and `response_format: json_object`. The lenient
+three-tier JSON parser was retained as a safety net.
 
-Full analysis and ranked alternatives (Gemini > Groq > Cerebras; GitHub Models
-ruled out as retired): **`docs/AI-PROVIDERS.md`**.
+Ranked alternatives (Gemini > Groq > Cerebras; GitHub Models ruled out as
+retired) were written up in **`docs/AI-PROVIDERS.md`** for the user to decide on.
+
+---
+
+## 3b. Second pass — Gemini, editing, translation
+
+The user reviewed the recommendation and asked for Gemini to be implemented,
+along with a set of UI changes.
+
+### Gemini is now the primary provider
+
+`api/_lib/providers.ts` introduces a provider abstraction. `resolveProviders()`
+returns Gemini first when `GEMINI_API_KEY` is set, then OpenRouter.
+`createCompletion` walks providers, then models within each, retrying transient
+failures once with backoff.
+
+Gemini sends `responseSchema` + `responseMimeType: application/json`, so the
+model is **structurally constrained** to the expected object and cannot answer
+with prose. That is the whole reason for the switch.
+
+**Removing `GEMINI_API_KEY` restores the previous OpenRouter-only behaviour
+exactly** — the fallback is not a degraded mode, it is the old code path.
+
+Phone setup walkthrough: **`docs/GEMINI-SETUP.md`**.
+
+### Other changes in this pass
+
+- **Dark mode is now the default.** `resolveTheme` falls back to `'dark'`, not
+  `'system'`. Choosing "Auto" opts into following the OS. Persisted in
+  `localStorage`, not cookies — it never needs to reach the server, and a cookie
+  would be sent on every request for no reason.
+- **Full-screen README editor** (`readme-editor.tsx`). Tapping Edit on the
+  generated README opens it full screen with edit/preview modes; the current
+  README opens read-only. Saved edits become what gets written to GitHub.
+- **The inline README pane is deliberately short** (`clamp(160px, 26dvh, 320px)`)
+  with a fade and an Edit/Expand affordance. This is what makes the review step
+  fit one phone screen — the editor is where reading actually happens.
+- **Translation** — 12 languages, applied to the generated README and
+  description. Code, commands and identifiers are left untouched; topics stay
+  lowercase English. The language value is re-validated server-side against a
+  strict pattern because it reaches the prompt.
+- **Deploy guidance** — when a repo has no homepage, links to Vercel, Netlify
+  and GitHub Pages guides appear under the field. Shown whether or not the row
+  is ticked.
+- **Checklist shows only unmet items.** A row saying "Description set ✓" costs
+  vertical space to say nothing actionable.
+
+### A bug introduced and removed in the same pass
+
+The first cut of metadata generation prefilled the homepage field from the
+model's `deploy_suggestion` when it contained a URL. That URL is a **guess** —
+`https://example.vercel.app` — and a user who ticked Homepage without reading
+would write a dead link to GitHub. Removed. The homepage is never prefilled from
+model output.
 
 ---
 
@@ -167,7 +221,10 @@ security headers via `vercel.json`; Google Fonts CDN removed.
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `OPENROUTER_API_KEY` | Yes | Server-only |
+| `GEMINI_API_KEY` | Recommended | Primary provider. See `docs/GEMINI-SETUP.md` |
+| `GEMINI_MODEL` | No | Override; defaults to a built-in chain |
+| `GEMINI_FALLBACK_MODELS` | No | Comma-separated |
+| `OPENROUTER_API_KEY` | Fallback | Server-only. Used when Gemini is absent or fails |
 | `OPENROUTER_MODEL` | No | Default `baidu/cobuddy:free` |
 | `OPENROUTER_FALLBACK_MODELS` | No | Comma-separated. **Use only `:free` models** |
 | `GITHUB_CLIENT_ID` | Yes | |
@@ -221,12 +278,21 @@ npm run test:all
    Intentional per project constraints. If it grows again, extract a
    `useRepoWorkflow` hook before reaching for a state library.
 4. **No pagination or search across many repos** beyond client-side filtering.
-5. **Provider chain** — see `docs/AI-PROVIDERS.md`. Adding Gemini as primary
-   with OpenRouter as fallback is the highest-value follow-up.
+5. **Repository logo generation** — agreed as roadmap, not built. Note that the
+   GitHub social preview image is **not settable via the public REST API**, so a
+   first version has to write an image file into the repo instead. Start with a
+   deterministic SVG generator (free, testable) before any AI image call. See
+   `docs/ROADMAP.md`.
 6. **Fine-grained GitHub App** to replace the `repo` OAuth scope.
 7. **Firefox/WebKit** could not be downloaded in the dev sandbox; the projects
    are configured and skip gracefully, but have not been executed. Run them in
    CI before trusting Safari behaviour.
+8. **Gemini model names are unverified.** The default chain is
+   `gemini-2.5-flash` then `gemini-2.0-flash`, chosen without a live key to test
+   against. If every generation falls through to OpenRouter, that is the first
+   thing to check — set `GEMINI_MODEL` to a current model.
+9. **Groq / Cerebras** can now be added as one `Provider` object each. Only
+   worth doing if Gemini's quota becomes a real constraint.
 
 ---
 

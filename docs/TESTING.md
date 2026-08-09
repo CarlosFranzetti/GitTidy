@@ -1,9 +1,9 @@
 # Testing
 
 ```bash
-npm test           # Vitest unit + component tests (130)
+npm test           # Vitest unit + component tests (154)
 npm run test:watch # Vitest in watch mode
-npm run test:e2e   # Playwright browser matrix (48 in Chromium alone)
+npm run test:e2e   # Playwright browser matrix (69 in Chromium alone)
 npm run test:all   # both
 npm run typecheck  # app, api and test sources
 ```
@@ -21,6 +21,8 @@ npm run typecheck  # app, api and test sources
 | `api/_lib/http.test.ts` | Model JSON parsing — clean, fenced, prose-wrapped, code-in-string, unparseable |
 | `api/_lib/oauth.test.ts` | Constant-time state comparison, cookie parsing incl. suffix-collision attempts |
 | `api/_lib/guard.test.ts` | Rate-limit window and per-identity isolation, byte-accurate body cap, origin checks, identity caching |
+| `api/_lib/providers.test.ts` | Provider ordering, Gemini schema request shape, multi-part responses, safety blocks, timeout vs network failure, OpenRouter fallback |
+| `src/components/readme-editor.test.tsx` | Edit vs read-only mode, dirty tracking, save/cancel, preview of unsaved edits, scroll restoration |
 
 Two of these encode bugs found in review, so a regression fails loudly:
 
@@ -40,6 +42,9 @@ and never touch a real service or spend AI quota.
 - Cancelling writes nothing.
 - The metadata-only path works without generating a README.
 - The Current/New README switch.
+- The full-screen editor: edits survive into the Apply step.
+- The current README opens read-only.
+- Deploy guidance appears when a repo has no homepage.
 - An AI failure surfaces without losing the loaded repo.
 - Invalid topics block the Apply button before any request.
 
@@ -49,7 +54,9 @@ and never touch a real service or spend AI quota.
   wide-table README renders.
 - The primary action stays in the viewport after scrolling (sticky action bar).
 - Every button, link and checkbox is at least 44px tall.
-- `prefers-color-scheme` is honoured.
+- Dark mode is the default even when the OS prefers light.
+- Theme and typeface choices persist across reloads.
+- The review step fits roughly one phone screen; the editor fills it.
 - The app still renders when `localStorage` throws.
 - The OAuth token never remains in the visible URL.
 
@@ -79,9 +86,13 @@ clipboard permissions and `backdrop-filter` diverge from Chromium.
 
 ## What is deliberately not covered
 
-- **The real OpenRouter call.** Stubbed everywhere. Testing it would spend quota
-  and be non-deterministic. `api/_lib/http.test.ts` covers response parsing,
-  which is where the failures actually happen.
+- **Real AI calls.** Both Gemini and OpenRouter are stubbed everywhere. Testing
+  them would spend quota and be non-deterministic. `providers.test.ts` covers
+  request shape and every error branch; `http.test.ts` covers response parsing,
+  which is where failures actually happen.
+- **Whether the default Gemini model names exist.** No live key was available,
+  so the chain is unverified against the real API. A wrong name falls through to
+  OpenRouter rather than breaking, which is the point of the fallback.
 - **The real OAuth handshake.** Requires GitHub credentials and a browser
   redirect to github.com. The security-relevant parts — state comparison, cookie
   handling — are unit tested directly.
