@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HttpError, parseModelJson, previewText, resolveStatus } from './http'
+import { HttpError, parseModelJson, previewText, resolveStatus } from './http.js'
 
 describe('parseModelJson', () => {
   const expected = { readme_md: '# Hi', description: 'd', topics: ['a'] }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readCookie, safeEqual, stateCookieName } from './oauth'
+import { readCookie, safeEqual, stateCookieName } from './oauth.js'
 
 describe('safeEqual', () => {
   it('matches identical strings', () => {

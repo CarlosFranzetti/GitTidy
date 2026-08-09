@@ -1,12 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { readEnvValue } from '../../_lib/env'
+import { readEnvValue } from '../../_lib/env.js'
 import {
   isHttps,
   readCookie,
   resolveBaseUrl,
   safeEqual,
   stateCookieName,
-} from '../../_lib/oauth'
+} from '../../_lib/oauth.js'
 
 type GitHubTokenResponse = {
   access_token?: string

@@ -40,6 +40,8 @@ export type GenerateSuggestionsRequest = {
   repos: RepoGenerationInput[]
   context: GenerationContext
   mode?: GenerationMode
+  /** Human language for the generated README, e.g. "Spanish". */
+  language?: string
   refinementInput?: string
   currentReadmeMd?: string
 }

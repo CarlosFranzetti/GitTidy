@@ -48,11 +48,17 @@ describe('preference resolvers', () => {
     ['light', 'light'],
     ['dark', 'dark'],
     ['system', 'system'],
-    ['nonsense', 'system'],
-    [null, 'system'],
-  ])('resolves theme %j to %s', (input, expected) => {
+  ])('honours a stored theme of %j', (input, expected) => {
     expect(resolveTheme(input)).toBe(expected)
   })
+
+  // GitTidy opens dark. Only an explicit "system" choice follows the OS.
+  it.each([['nonsense'], [null]])(
+    'falls back to dark for %j',
+    (input) => {
+      expect(resolveTheme(input as string | null)).toBe('dark')
+    },
+  )
 
   it.each([
     ['inter', 'inter'],

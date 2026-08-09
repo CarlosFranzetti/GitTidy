@@ -1,9 +1,9 @@
 # Testing
 
 ```bash
-npm test           # Vitest unit + component tests (130)
+npm test           # Vitest unit + component tests (157)
 npm run test:watch # Vitest in watch mode
-npm run test:e2e   # Playwright browser matrix (48 in Chromium alone)
+npm run test:e2e   # Playwright browser matrix (69 in Chromium alone)
 npm run test:all   # both
 npm run typecheck  # app, api and test sources
 ```
@@ -21,13 +21,27 @@ npm run typecheck  # app, api and test sources
 | `api/_lib/http.test.ts` | Model JSON parsing — clean, fenced, prose-wrapped, code-in-string, unparseable |
 | `api/_lib/oauth.test.ts` | Constant-time state comparison, cookie parsing incl. suffix-collision attempts |
 | `api/_lib/guard.test.ts` | Rate-limit window and per-identity isolation, byte-accurate body cap, origin checks, identity caching |
+| `api/esm-resolution.test.ts` | Every relative import in `api/` carries an explicit `.js` extension and resolves — replicates Node's ESM resolver, which Vitest's own resolution cannot catch |
+| `api/_lib/providers.test.ts` | Provider ordering, Gemini schema request shape, multi-part responses, safety blocks, timeout vs network failure, OpenRouter fallback |
+| `src/components/readme-editor.test.tsx` | Edit vs read-only mode, dirty tracking, save/cancel, preview of unsaved edits, scroll restoration |
 
-Two of these encode bugs found in review, so a regression fails loudly:
+Three of these encode bugs that actually shipped, so a regression fails loudly:
 
 - **Partial metadata writes** — the old code sent cached values for unselected
   fields, reverting other people's edits.
 - **Confirm dialog item list** — the old dialog joined items with `\n` into a
   single `<p>`, which CSS collapsed into one run-on line.
+- **ESM resolution** — extensionless relative imports in `api/` broke every
+  serverless function in production (`ERR_MODULE_NOT_FOUND`) while passing lint,
+  typecheck and the whole test suite locally.
+
+### The gap that let a production break through
+
+The suite mocked `fetch` everywhere and never loaded a serverless handler the
+way Node does, so a module-resolution failure was invisible. Two guards now
+cover it: `tsconfig.api.json` uses `nodenext` (missing extension = compile
+error) and `esm-resolution.test.ts` walks the real files. **Mocked tests say
+nothing about whether the module graph loads.**
 
 ## Browser tests (Playwright)
 
@@ -40,6 +54,9 @@ and never touch a real service or spend AI quota.
 - Cancelling writes nothing.
 - The metadata-only path works without generating a README.
 - The Current/New README switch.
+- The full-screen editor: edits survive into the Apply step.
+- The current README opens read-only.
+- Deploy guidance appears when a repo has no homepage.
 - An AI failure surfaces without losing the loaded repo.
 - Invalid topics block the Apply button before any request.
 
@@ -49,7 +66,9 @@ and never touch a real service or spend AI quota.
   wide-table README renders.
 - The primary action stays in the viewport after scrolling (sticky action bar).
 - Every button, link and checkbox is at least 44px tall.
-- `prefers-color-scheme` is honoured.
+- Dark mode is the default even when the OS prefers light.
+- Theme and typeface choices persist across reloads.
+- The review step fits roughly one phone screen; the editor fills it.
 - The app still renders when `localStorage` throws.
 - The OAuth token never remains in the visible URL.
 
@@ -79,9 +98,13 @@ clipboard permissions and `backdrop-filter` diverge from Chromium.
 
 ## What is deliberately not covered
 
-- **The real OpenRouter call.** Stubbed everywhere. Testing it would spend quota
-  and be non-deterministic. `api/_lib/http.test.ts` covers response parsing,
-  which is where the failures actually happen.
+- **Real AI calls.** Both Gemini and OpenRouter are stubbed everywhere. Testing
+  them would spend quota and be non-deterministic. `providers.test.ts` covers
+  request shape and every error branch; `http.test.ts` covers response parsing,
+  which is where failures actually happen.
+- **Whether the default Gemini model names exist.** No live key was available,
+  so the chain is unverified against the real API. A wrong name falls through to
+  OpenRouter rather than breaking, which is the point of the fallback.
 - **The real OAuth handshake.** Requires GitHub credentials and a browser
   redirect to github.com. The security-relevant parts — state comparison, cookie
   handling — are unit tested directly.

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { randomUUID } from 'node:crypto'
-import { readEnvValue } from '../../_lib/env'
-import { isHttps, resolveBaseUrl, stateCookieName } from '../../_lib/oauth'
+import { readEnvValue } from '../../_lib/env.js'
+import { isHttps, resolveBaseUrl, stateCookieName } from '../../_lib/oauth.js'
 
 export default function handler(request: VercelRequest, response: VercelResponse) {
   const clientId = readEnvValue('GITHUB_CLIENT_ID')
